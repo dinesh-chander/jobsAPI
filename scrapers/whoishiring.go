@@ -2,7 +2,7 @@ package scrapers
 
 import (
 	"fmt"
-	"jobsAPI-helpers/job"
+	"github.com/dispareil/jobsAPI/job"
 	"github.com/gorhill/cronexpr"
 	//"time"
 )

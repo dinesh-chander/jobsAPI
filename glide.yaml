@@ -1,3 +1,3 @@
-package: github.com/
+package: github.com/dispareil/jobsAPI
 import:
 - package: github.com/gorhill/cronexpr

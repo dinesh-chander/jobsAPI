@@ -1,9 +1,9 @@
 package main
 
 import (
-	"jobsAPI-helpers/scrapers"
-	"jobsAPI-helpers/job"
-	"jobsAPI-helpers/api"
+	"github.com/dispareil/jobsAPI/scrapers"
+	"github.com/dispareil/jobsAPI/job"
+	"github.com/dispareil/jobsAPI/api"
 )
 
 func main() {
