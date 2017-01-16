@@ -1,6 +1,0 @@
-hash: 664d1e46031891b02abe0d3819d7345a39dd96e462c4a9c49584918edd77b5ae
-updated: 2017-01-16T13:12:36.844583932+05:30
-imports:
-- name: github.com/gorhill/cronexpr
-  version: d520615e531a6bf3fb69406b9eba718261285ec8
-testImports: []

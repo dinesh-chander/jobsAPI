@@ -11,14 +11,14 @@ type Job struct {
 	job_got_reference_from string
 }
 
-func New() Job {
+func New() *Job {
 	return &Job{}
 }
 
-func AddJob(newJob Job) {
+func AddJob(newJob *Job) {
 
 }
 
-func GetJob() Job {
+func GetJob() *Job {
 	return  &Job{}
 }
