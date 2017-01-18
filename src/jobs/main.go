@@ -1,4 +1,4 @@
-package jobs
+package main
 
 import (
 	"api"
@@ -13,7 +13,7 @@ func main() {
 
 	scheduleScrappers(jobsStream, programConfig)
 	go updateNewJobs(jobsStream)
-	go api.StartServer()
+	api.StartServer()
 }
 
 func updateNewJobs(jobsStream chan *job.Job) {

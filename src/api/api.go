@@ -3,7 +3,9 @@ package api
 import (
 	"config"
 	"fmt"
+
 	"net/http"
+	"time"
 )
 
 func getAllJobs(response http.ResponseWriter, request *http.Request) {
@@ -17,6 +19,10 @@ func getAllJobs(response http.ResponseWriter, request *http.Request) {
 		errMsg := []byte("Wrong Method for the endpoint")
 		response.Write(errMsg)
 	}
+}
+
+func pathHandler(response http.ResponseWriter, request *http.Request) {
+
 }
 
 func StartServer() {
@@ -35,7 +41,15 @@ func StartServer() {
 
 	address := networkInterface + ":" + port
 
-	fmt.Println("Starting API Server At : ", address)
-	http.HandleFunc("/get", getAllJobs)
-	http.ListenAndServe(address, nil)
+	fmt.Println("Starting API Server At :", address)
+
+	server := &http.Server{
+		Addr:           address,
+		Handler:        http.HandlerFunc(pathHandler),
+		ReadTimeout:    30 * time.Second,
+		WriteTimeout:   30 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+
+	server.ListenAndServe()
 }
