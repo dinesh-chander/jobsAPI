@@ -15,11 +15,13 @@ type Job struct {
 	Title         string
 	Company       string
 	Description   string
-	PublishedDate string
+	PublishedDate int64
 	Compensation  string
 	Location      string
 	IsRemote      string
 	JobFrom       string
+	Tags          []string
+	Share_Tags    []String
 }
 
 func (Job) TableName() string {
