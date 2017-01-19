@@ -55,8 +55,10 @@ func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Jo
 	singleJob.Location = newJob.Address
 	singleJob.IsRemote = newJob.Remote
 	singleJob.PublishedDate = newJob.Time
-	singleJob.Tags = newJob.Tags
-	singleJob.Share_Tags = newJob.Tags_share
+	singleJob.Title = newJob.Title
+	//	singleJob.Tags = newJob.Tags
+	//	singleJob.Share_Tags = newJob.Tags_share
+	singleJob.Source = newJob.Source
 
 	return
 }
@@ -92,11 +94,8 @@ func makeRequest() (jobsList [](*whoIsHiringJobStruct)) {
 	responseBody, readErr := ioutil.ReadAll(response.Body)
 
 	if readErr != nil {
-
 		fmt.Println("Response Body read error")
-
 	} else {
-
 		hits := gjson.GetBytes(responseBody, "hits.hits")
 		jobsList = [](*whoIsHiringJobStruct){}
 
@@ -108,13 +107,11 @@ func makeRequest() (jobsList [](*whoIsHiringJobStruct)) {
 			if parseErr != nil {
 				fmt.Println("Unable to UNMARSHAL")
 			} else {
-				fmt.Println(jobDetails.Tags)
 				jobsList = append(jobsList, &jobDetails)
 			}
 
 			return true
 		})
-
 	}
 
 	return
