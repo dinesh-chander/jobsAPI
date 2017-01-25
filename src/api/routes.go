@@ -1,7 +1,6 @@
 package api
 
 import (
-	_ "api/routes/jobs"
 	routeRegistry "api/routesRegistry"
 	"net/http"
 )

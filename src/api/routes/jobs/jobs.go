@@ -2,7 +2,8 @@ package jobs
 
 import (
 	routesRegistry "api/routesRegistry"
-	"net/http"
+	jobModel "models/job"
+	http "net/http"
 )
 
 func getAllJobs(response http.ResponseWriter, request *http.Request) {
@@ -12,6 +13,7 @@ func getAllJobs(response http.ResponseWriter, request *http.Request) {
 
 		query := &Query{}
 		query.parseQueryParamsFromURL(request.URL)
+		jobModel.SearchContent("")
 
 		responseData := []byte("Send Actual Data")
 		response.Write(responseData)

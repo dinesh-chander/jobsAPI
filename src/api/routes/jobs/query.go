@@ -7,8 +7,8 @@ import (
 
 type Query struct {
 	Location []string
-	Role     []string
-	Keywords []string
+	Title    []string
+	Tags     []string
 }
 
 func (query *Query) parseQueryParamsFromURL(url *url.URL) {
@@ -18,11 +18,11 @@ func (query *Query) parseQueryParamsFromURL(url *url.URL) {
 		query.Location = strings.Split(queryParams.Get("location"), ",")
 	}
 
-	if len(queryParams.Get("role")) > 0 {
-		query.Role = strings.Split(queryParams.Get("role"), ",")
+	if len(queryParams.Get("title")) > 0 {
+		query.Title = strings.Split(queryParams.Get("title"), ",")
 	}
 
-	if len(queryParams.Get("keywords")) > 0 {
-		query.Keywords = strings.Split(queryParams.Get("keywords"), ",")
+	if len(queryParams.Get("tags")) > 0 {
+		query.Tags = strings.Split(queryParams.Get("tags"), ",")
 	}
 }
