@@ -2,16 +2,22 @@ package api
 
 import (
 	"config"
-	"fmt"
+	"log"
+	"logger"
 
 	"net/http"
 	"time"
 )
 
+var loggerInstance *log.Logger
+
 func getAllJobs(response http.ResponseWriter, request *http.Request) {
 	if request.Method == "GET" {
 		response.Header().Set("Content-Type", "application/json")
 		response.WriteHeader(http.StatusOK)
+
+		query := &Query{}
+		query.parseQueryParamsFromURL(request.URL)
 
 		responseData := []byte("Send Actual Data")
 		response.Write(responseData)
@@ -22,7 +28,15 @@ func getAllJobs(response http.ResponseWriter, request *http.Request) {
 }
 
 func pathHandler(response http.ResponseWriter, request *http.Request) {
-
+	switch request.URL.Path {
+	case "/jobs":
+		getAllJobs(response, request)
+		break
+	default:
+		response.WriteHeader(http.StatusOK)
+		response.Header().Set("Content-Type", "text/html")
+		response.Write([]byte("Wrong Endpoint"))
+	}
 }
 
 func StartServer() {
@@ -41,7 +55,7 @@ func StartServer() {
 
 	address := networkInterface + ":" + port
 
-	fmt.Println("Starting API Server At :", address)
+	loggerInstance.Println("Starting API Server At :", address)
 
 	server := &http.Server{
 		Addr:           address,
@@ -52,4 +66,8 @@ func StartServer() {
 	}
 
 	server.ListenAndServe()
+}
+
+func init() {
+	loggerInstance = logger.Logger
 }

@@ -2,9 +2,10 @@ package scrapers
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"job"
+	"log"
+	"logger"
 	"net/http"
 	"strings"
 	"time"
@@ -28,11 +29,12 @@ type whoIsHiringJobStruct struct {
 	Source_name     string
 	Remote          bool
 	Time            int
-	Tags            []string
 	Tags_share      []string
 	Apply           string
 	Visa            bool
 }
+
+var loggerInstance *log.Logger
 
 func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string) {
 	whoIsHiringJobsStream := make(chan *whoIsHiringJobStruct, 10)
@@ -48,7 +50,7 @@ func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string) {
 }
 
 func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Job) {
-	singleJob = job.New()
+	singleJob = job.NewJob()
 
 	singleJob.Company = newJob.Company
 	singleJob.Description = newJob.Description
@@ -56,9 +58,8 @@ func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Jo
 	singleJob.IsRemote = newJob.Remote
 	singleJob.PublishedDate = newJob.Time
 	singleJob.Title = newJob.Title
-	//	singleJob.Tags = newJob.Tags
-	//	singleJob.Share_Tags = newJob.Tags_share
 	singleJob.Source = newJob.Source
+	singleJob.Tags = strings.Join(newJob.Tags_share, " ")
 
 	return
 }
@@ -74,7 +75,6 @@ func fetchJobs(whoIsHiringJobsStream chan *whoIsHiringJobStruct, scheduleAt stri
 		}
 
 		nextTime := expr.Next(time.Now())
-		fmt.Println("Sleeping for :", nextTime.Unix()-time.Now().Unix())
 		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
 	}
 }
@@ -88,31 +88,35 @@ func makeRequest() (jobsList [](*whoIsHiringJobStruct)) {
 	response, err := httpClient.Post("https://search.whoishiring.io/item/item/_search?scroll=10m", "application/x-www-form-urlencoded", postDataReader)
 
 	if (err != nil) || (response.StatusCode != 200) {
-		panic(err)
-	}
-
-	responseBody, readErr := ioutil.ReadAll(response.Body)
-
-	if readErr != nil {
-		fmt.Println("Response Body read error")
+		loggerInstance.Println(err)
 	} else {
-		hits := gjson.GetBytes(responseBody, "hits.hits")
-		jobsList = [](*whoIsHiringJobStruct){}
+		responseBody, readErr := ioutil.ReadAll(response.Body)
 
-		hits.ForEach(func(key, value gjson.Result) bool {
-			var jobDetails whoIsHiringJobStruct
-			jobJSON := []byte(value.Get("_source").String())
-			parseErr := json.Unmarshal(jobJSON, &jobDetails)
+		if readErr != nil {
+			loggerInstance.Println("Response Body read error")
+		} else {
+			hits := gjson.GetBytes(responseBody, "hits.hits")
+			jobsList = [](*whoIsHiringJobStruct){}
 
-			if parseErr != nil {
-				fmt.Println("Unable to UNMARSHAL")
-			} else {
-				jobsList = append(jobsList, &jobDetails)
-			}
+			hits.ForEach(func(key, value gjson.Result) bool {
+				var jobDetails whoIsHiringJobStruct
+				jobJSON := []byte(value.Get("_source").String())
+				parseErr := json.Unmarshal(jobJSON, &jobDetails)
 
-			return true
-		})
+				if parseErr != nil {
+					loggerInstance.Println("Unable to UNMARSHAL")
+				} else {
+					jobsList = append(jobsList, &jobDetails)
+				}
+
+				return true
+			})
+		}
 	}
 
 	return
+}
+
+func init() {
+	loggerInstance = logger.Logger
 }
