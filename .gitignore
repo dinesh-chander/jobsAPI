@@ -1,3 +1,7 @@
+
+# Created by https://www.gitignore.io/api/go
+
+### Go ###
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
 *.a
@@ -23,8 +27,12 @@ _testmain.go
 *.test
 *.prof
 
-# Dependencies folder
-vendor/*
-.idea/*
-bin/*
-pkg/*
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# External packages folder
+vendor/
+**/*.db
+pkg
+bin
+# End of https://www.gitignore.io/api/go
