@@ -37,15 +37,19 @@ type whoIsHiringJobStruct struct {
 var loggerInstance *log.Logger
 
 func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string) {
-	whoIsHiringJobsStream := make(chan *whoIsHiringJobStruct, 10)
-
-	go fetchJobs(whoIsHiringJobsStream, scheduleAt)
+	expr := cronexpr.MustParse(scheduleAt)
 
 	for {
-		select {
-		case newJob := <-whoIsHiringJobsStream:
-			jobsStream <- convertToStandardJobStruct(newJob)
+		jobsList := makeRequest()
+
+		for _, jobDetails := range jobsList {
+			go func(newJob *whoIsHiringJobStruct) {
+				jobsStream <- convertToStandardJobStruct(newJob)
+			}(jobDetails)
 		}
+
+		nextTime := expr.Next(time.Now())
+		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
 	}
 }
 
@@ -62,21 +66,6 @@ func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Jo
 	singleJob.Tags = strings.Join(newJob.Tags_share, " ")
 
 	return
-}
-
-func fetchJobs(whoIsHiringJobsStream chan *whoIsHiringJobStruct, scheduleAt string) {
-	expr := cronexpr.MustParse(scheduleAt)
-
-	for {
-		jobsList := makeRequest()
-
-		for _, jobDetails := range jobsList {
-			whoIsHiringJobsStream <- jobDetails
-		}
-
-		nextTime := expr.Next(time.Now())
-		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
-	}
 }
 
 func makeRequest() (jobsList [](*whoIsHiringJobStruct)) {

@@ -3,16 +3,22 @@ package main
 import (
 	"api"
 	"config"
+	"log"
+	"logger"
 	"models/job"
 	"scrapers"
 )
 
+var loggerInstance *log.Logger
+
 func main() {
 	programConfig := config.GetConfig()
-	jobsStream := make(chan *job.Job, 10)
+	jobsStream := make(chan *job.Job, 200)
+
+	go updateNewJobs(jobsStream)
 
 	scheduleScrappers(jobsStream, programConfig)
-	go updateNewJobs(jobsStream)
+
 	api.StartServer()
 }
 
@@ -27,4 +33,8 @@ func updateNewJobs(jobsStream chan *job.Job) {
 
 func scheduleScrappers(jobsStream chan *job.Job, programConfig map[string]string) {
 	go scrapers.GetWhoIsHiringJobs(jobsStream, programConfig["whoishiring"])
+}
+
+func init() {
+	loggerInstance = logger.Logger
 }

@@ -11,7 +11,7 @@ type Query struct {
 	Tags     []string
 }
 
-func (query *Query) parseQueryParamsFromURL(url *url.URL) {
+func (query *Query) ParseQueryParamsFromURL(url *url.URL) {
 	queryParams := url.Query()
 
 	if len(queryParams.Get("location")) > 0 {
