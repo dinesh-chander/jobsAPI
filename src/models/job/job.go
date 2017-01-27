@@ -19,11 +19,13 @@ type Job struct {
 	Location      string
 	IsRemote      bool
 	Source        string
+	Source_Id     string `gorm:"unique_index"`
 	Tags          string
 	Approved      bool
 }
 
 type SearchableContent struct {
+	ID          string
 	Title       string
 	Company     string
 	Description string
@@ -53,10 +55,11 @@ func init() {
 	loggerInstance = logger.Logger
 
 	db, databaseCreationErr = gorm.Open("sqlite3", "job.db")
+	db.LogMode(false)
 
 	db.Exec("PRAGMA auto_vacuum  = INCREMENTAL")
-	db.Exec("PRAGMA cache_size   = 10000")
-	db.Exec("PRAGMA synchronous  = OFF")
+	db.Exec("PRAGMA synchronous  = NORMAL")
+	db.Exec("PRAGMA journal_mode = MEMORY")
 
 	db.SingularTable(true)
 
@@ -80,7 +83,7 @@ func createSearchTable() {
 		loggerInstance.Fatalln(err.Error())
 	}
 
-	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(Title, Company, Description, Location, Tags)", searchTableName)).Error
+	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(ID, Title, Company, Description, Location, Tags)", searchTableName)).Error
 
 	if tableCreationErr != nil {
 		loggerInstance.Fatalln(tableCreationErr.Error())

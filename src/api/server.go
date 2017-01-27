@@ -4,7 +4,6 @@ import (
 	"config"
 	"log"
 	"logger"
-
 	"net/http"
 	"time"
 )
@@ -12,17 +11,15 @@ import (
 var loggerInstance *log.Logger
 
 func StartServer() {
-	programConfig := config.GetConfig()
-
 	port := "8080"
 	networkInterface := "localhost"
 
-	if programConfig["port"] != "" {
-		port = programConfig["port"]
+	if config.GetConfig("port") != "" {
+		port = config.GetConfig("port")
 	}
 
-	if programConfig["interface"] != "" {
-		networkInterface = programConfig["interface"]
+	if config.GetConfig("interface") != "" {
+		networkInterface = config.GetConfig("interface")
 	}
 
 	address := networkInterface + ":" + port

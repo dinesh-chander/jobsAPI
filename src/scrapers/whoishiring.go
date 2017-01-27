@@ -63,6 +63,7 @@ func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Jo
 	singleJob.PublishedDate = newJob.Time
 	singleJob.Title = newJob.Title
 	singleJob.Source = newJob.Source
+	singleJob.Source_Id = newJob.Id
 	singleJob.Tags = strings.Join(newJob.Tags_share, " ")
 
 	return

@@ -1,8 +1,6 @@
 package job
 
 import (
-	"bytes"
-	"compress/gzip"
 	"fmt"
 	jobInterface "interfaces/jobs"
 	"strconv"
@@ -10,37 +8,30 @@ import (
 )
 
 func AddJob(newJob *Job) {
-	var compressedDescription bytes.Buffer
-	compressedJob := *newJob
+	var insertErr error
 
-	gz, gzErr := gzip.NewWriterLevel(&compressedDescription, 9)
+	tx := db.Begin()
 
-	if gzErr != nil {
-		loggerInstance.Println(gzErr.Error())
+	defer tx.Commit()
+
+	insertErr = db.Create(newJob).Error
+
+	if insertErr != nil {
+		tx.Rollback()
+		loggerInstance.Println(insertErr.Error())
 	} else {
-		var writeErr error
+		insertErr = addSearchableContent(newJob)
 
-		_, writeErr = gz.Write([]byte(compressedJob.Description))
-
-		if writeErr != nil {
-			loggerInstance.Println(writeErr.Error())
-		} else if writeErr = gz.Flush(); writeErr != nil {
-			loggerInstance.Println(writeErr.Error())
-		} else if writeErr = gz.Close(); writeErr != nil {
-			loggerInstance.Println(writeErr.Error())
-		} else {
-			compressedJob.Description = compressedDescription.String()
-
-			loggerInstance.Println(len(compressedJob.Description), len(newJob.Description))
-
-			db.Create(&compressedJob)
-			addSearchableContent(newJob)
+		if insertErr != nil {
+			tx.Rollback()
+			loggerInstance.Println(insertErr.Error())
 		}
 	}
 }
 
-func addSearchableContent(newJob *Job) {
+func addSearchableContent(newJob *Job) error {
 	newSearchableContent := &SearchableContent{
+		ID:          newJob.Source_Id,
 		Title:       newJob.Title,
 		Company:     newJob.Company,
 		Description: newJob.Description,
@@ -48,7 +39,7 @@ func addSearchableContent(newJob *Job) {
 		Tags:        newJob.Tags,
 	}
 
-	db.Create(newSearchableContent)
+	return db.Create(newSearchableContent).Error
 }
 
 func GetAll() (jobsList []Job) {
@@ -68,30 +59,39 @@ func GetJobsCount() (count int) {
 	return count
 }
 
-func SearchContent(searchQuery *jobInterface.Query) (result []SearchableContent) {
+func SearchContent(searchQuery *jobInterface.Query) (searchResult []Job) {
 	loggerInstance.Println("Search query is ", searchQuery)
 	searchString := buildSearchString(searchQuery)
 
-	searchQuerySQLString := fmt.Sprintf("SELECT * FROM %s WHERE %s MATCH %s ORDER BY rank", searchTableName, searchTableName, searchString)
+	searchQuerySQLString := fmt.Sprintf("SELECT DISTINCT(ID) FROM %s WHERE %s MATCH %s ORDER BY rank", searchTableName, searchTableName, searchString)
 
 	loggerInstance.Println(searchQuerySQLString)
 
-	rows, err := db.Raw(searchQuerySQLString).Rows()
+	tx := db.Begin()
+
+	rows, err := tx.Raw(searchQuerySQLString).Rows()
 
 	defer rows.Close()
+	defer tx.Commit()
 
 	if err != nil {
 		loggerInstance.Println(err.Error())
 		return
 	}
 
-	result = []SearchableContent{}
+	var ID string
+	searchResult = []Job{}
 
 	for rows.Next() {
-		var newSearchableContent SearchableContent
-		db.ScanRows(rows, &newSearchableContent)
-		loggerInstance.Println(newSearchableContent.Location)
-		result = append(result, newSearchableContent)
+		scanErr := rows.Scan(&ID)
+
+		if scanErr != nil {
+			loggerInstance.Println(scanErr.Error())
+		} else {
+			var newJob Job
+			tx.First(&newJob, "Source_Id = ?", ID)
+			searchResult = append(searchResult, newJob)
+		}
 	}
 
 	return
