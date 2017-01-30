@@ -1,9 +1,12 @@
 package job
 
 import (
+	"config"
 	"fmt"
 	"log"
 	"logger"
+	"strconv"
+	"time"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
@@ -11,17 +14,19 @@ import (
 
 type Job struct {
 	gorm.Model
-	Title         string
-	Company       string
-	Description   string
-	PublishedDate int
-	Compensation  string
-	Location      string
-	IsRemote      bool
-	Source        string
-	Source_Id     string `gorm:"unique_index"`
-	Tags          string
-	Approved      bool
+	Title          string
+	Address        string
+	City           string
+	Company        string
+	Country        string
+	Description    string
+	Published_Date uint64
+	Compensation   string
+	Is_Remote      bool
+	Source         string
+	Source_Id      string `gorm:"unique_index"`
+	Tags           string
+	Approved       bool
 }
 
 type SearchableContent struct {
@@ -57,8 +62,10 @@ func init() {
 	db, databaseCreationErr = gorm.Open("sqlite3", "job.db")
 	db.LogMode(false)
 
-	db.Exec("PRAGMA auto_vacuum  = INCREMENTAL")
-	db.Exec("PRAGMA synchronous  = NORMAL")
+	db.Exec("PRAGMA synchronous = NORMAL")
+	db.Exec("PRAGMA cache_size = -8000000")
+	db.Exec("PRAGMA read_uncommitted = true")
+	db.Exec("PRAGMA parser_trace = false")
 	db.Exec("PRAGMA journal_mode = MEMORY")
 
 	db.SingularTable(true)
@@ -74,6 +81,7 @@ func init() {
 	}
 
 	createSearchTable()
+	go removeOlderEntries()
 }
 
 func createSearchTable() {
@@ -89,18 +97,42 @@ func createSearchTable() {
 		loggerInstance.Fatalln(tableCreationErr.Error())
 	}
 
-	migrateJobRowsToSearchableContent()
+	go migrateJobRowsToSearchableContent()
 }
 
 func migrateJobRowsToSearchableContent() {
 	loggerInstance.Println("Migrating old data to searchable_content table")
+
+	var indexEntriesOfLastXDays uint64
+
+	if config.GetConfig("indexEntriesOfLastXDays") != "" {
+		var err error
+
+		indexEntriesOfLastXDays, err = strconv.ParseUint(config.GetConfig("indexEntriesOfLastXDays"), 10, 64)
+
+		if err != nil {
+			loggerInstance.Panicln("invalid value for 'indexEntriesOfLastXDays' in config. Value is :", config.GetConfig("indexEntriesOfLastXDays"))
+		}
+	} else {
+		indexEntriesOfLastXDays = 0 // index everything
+	}
+
+	loggerInstance.Println("Indexing Entries for last :", indexEntriesOfLastXDays, "Days")
+
+	if indexEntriesOfLastXDays != 0 {
+		indexEntriesOfLastXDays = (uint64(time.Now().Unix()) - (indexEntriesOfLastXDays * 24 * 3600)) * 1000
+	}
 
 	jobsList := GetAll()
 
 	db.Exec("BEGIN TRANSACTION")
 
 	for _, job := range jobsList {
-		addSearchableContent(&job)
+		if indexEntriesOfLastXDays != 0 {
+			if job.Published_Date > indexEntriesOfLastXDays {
+				addSearchableContent(&job)
+			}
+		}
 	}
 
 	db.Exec("COMMIT TRANSACTION")

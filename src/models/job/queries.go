@@ -8,38 +8,49 @@ import (
 )
 
 func AddJob(newJob *Job) {
+
 	var insertErr error
 
 	tx := db.Begin()
 
 	defer tx.Commit()
 
-	insertErr = db.Create(newJob).Error
+	insertErr = tx.Create(newJob).Error
 
 	if insertErr != nil {
-		tx.Rollback()
 		loggerInstance.Println(insertErr.Error())
 	} else {
-		insertErr = addSearchableContent(newJob)
+		newSearchableContent := addSearchableContent(newJob)
+
+		insertErr = tx.Create(newSearchableContent).Error
 
 		if insertErr != nil {
-			tx.Rollback()
 			loggerInstance.Println(insertErr.Error())
 		}
 	}
 }
 
-func addSearchableContent(newJob *Job) error {
-	newSearchableContent := &SearchableContent{
+func addSearchableContent(newJob *Job) (newSearchableContent *SearchableContent) {
+	location := newJob.Address
+
+	if newJob.City != "" {
+		location = location + " " + newJob.City
+	}
+
+	if newJob.Country != "" {
+		location = location + " " + newJob.Country
+	}
+
+	newSearchableContent = &SearchableContent{
 		ID:          newJob.Source_Id,
 		Title:       newJob.Title,
 		Company:     newJob.Company,
 		Description: newJob.Description,
-		Location:    newJob.Location,
+		Location:    location,
 		Tags:        newJob.Tags,
 	}
 
-	return db.Create(newSearchableContent).Error
+	return
 }
 
 func GetAll() (jobsList []Job) {
@@ -59,16 +70,40 @@ func GetJobsCount() (count int) {
 	return count
 }
 
-func SearchContent(searchQuery *jobInterface.Query) (searchResult []Job) {
-	loggerInstance.Println("Search query is ", searchQuery)
-	searchString := buildSearchString(searchQuery)
+func findFromNormalTable(searchQuerySQLString string) (searchResult []Job) {
 
-	searchQuerySQLString := fmt.Sprintf("SELECT DISTINCT(ID) FROM %s WHERE %s MATCH %s ORDER BY rank", searchTableName, searchTableName, searchString)
+	tx := db.Begin()
+	rows, err := tx.Raw(searchQuerySQLString).Rows()
+
+	defer rows.Close()
+	defer tx.Commit()
+
+	if err != nil {
+		loggerInstance.Println(err.Error())
+		return
+	}
+
+	searchResult = []Job{}
+
+	for rows.Next() {
+		var newJob Job
+		scanErr := tx.ScanRows(rows, &newJob)
+
+		if scanErr != nil {
+			loggerInstance.Println(scanErr.Error())
+		} else {
+			searchResult = append(searchResult, newJob)
+		}
+	}
+
+	return
+}
+
+func findFromSearchableTable(searchQuerySQLString string) (searchResult []Job) {
 
 	loggerInstance.Println(searchQuerySQLString)
 
 	tx := db.Begin()
-
 	rows, err := tx.Raw(searchQuerySQLString).Rows()
 
 	defer rows.Close()
@@ -97,16 +132,55 @@ func SearchContent(searchQuery *jobInterface.Query) (searchResult []Job) {
 	return
 }
 
+func FindContent(searchQuery *jobInterface.Query) (searchResult []Job) {
+
+	var searchQuerySQLString string
+	searchString := buildSearchString(searchQuery)
+
+	if searchString != "" {
+		searchQuerySQLString = fmt.Sprintf("SELECT DISTINCT(ID) FROM %s WHERE %s MATCH %s ORDER BY rank", searchTableName, searchTableName, searchString)
+		return findFromSearchableTable(searchQuerySQLString)
+	} else {
+		searchQuerySQLString = fmt.Sprintf("SELECT * FROM %s", tableName)
+		return findFromNormalTable(searchQuerySQLString)
+	}
+}
+
 func buildSearchString(searchQuery *jobInterface.Query) (searchString string) {
-	for index, value := range searchQuery.Location {
-		if index < len(searchQuery.Location)-1 {
-			searchQuery.Location[index] = "'Location:" + strconv.Quote(value) + "' OR "
-		} else {
-			searchQuery.Location[index] = "'Location:" + strconv.Quote(value) + "'"
+
+	queryStringList := [5]string{}
+
+	queryStringList[0] = formatSearchQuery(searchQuery.Location, "Location")
+	queryStringList[1] = formatSearchQuery(searchQuery.Company, "Company")
+	queryStringList[2] = formatSearchQuery(searchQuery.Tags, "Tags")
+	queryStringList[3] = formatSearchQuery(searchQuery.Title, "Title")
+
+	for _, value := range queryStringList {
+		if value != "" {
+			if searchString != "" {
+				searchString = searchString + " AND " + value
+			} else {
+				searchString = value
+			}
 		}
 	}
 
-	searchString = strings.Join(searchQuery.Location, "")
+	if searchString != "" {
+		searchString = "'" + searchString + "'"
+	}
 
 	return
+}
+
+func formatSearchQuery(searchStringsList []string, propertyName string) string {
+
+	for index, value := range searchStringsList {
+		if index < (len(searchStringsList) - 1) {
+			searchStringsList[index] = propertyName + ":" + strconv.Quote(value) + " OR "
+		} else {
+			searchStringsList[index] = propertyName + ":" + strconv.Quote(value)
+		}
+	}
+
+	return strings.Join(searchStringsList, "")
 }

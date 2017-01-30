@@ -22,7 +22,7 @@ func getAllJobs(response http.ResponseWriter, request *http.Request) {
 		query := &jobInterface.Query{}
 		query.ParseQueryParamsFromURL(request.URL)
 
-		resultList := jobModel.SearchContent(query)
+		resultList := jobModel.FindContent(query)
 
 		responseData, marshallingErr := json.Marshal(resultList)
 

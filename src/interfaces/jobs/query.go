@@ -9,6 +9,7 @@ type Query struct {
 	Location []string
 	Title    []string
 	Tags     []string
+	Company  []string
 }
 
 func (query *Query) ParseQueryParamsFromURL(url *url.URL) {
@@ -24,5 +25,9 @@ func (query *Query) ParseQueryParamsFromURL(url *url.URL) {
 
 	if len(queryParams.Get("tags")) > 0 {
 		query.Tags = strings.Split(queryParams.Get("tags"), ",")
+	}
+
+	if len(queryParams.Get("company")) > 0 {
+		query.Company = strings.Split(queryParams.Get("company"), ",")
 	}
 }
