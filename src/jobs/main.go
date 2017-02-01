@@ -6,13 +6,20 @@ import (
 	"log"
 	"logger"
 	"models/job"
+	"net/http"
+	_ "net/http/pprof"
 	"scrapers"
+	"strconv"
+	"time"
 )
 
 var loggerInstance *log.Logger
 
 func main() {
-	jobsStream := make(chan *job.Job, 200)
+
+	go http.ListenAndServe(":8081", nil)
+
+	jobsStream := make(chan *job.Job, 500)
 
 	go updateNewJobs(jobsStream)
 
@@ -31,7 +38,15 @@ func updateNewJobs(jobsStream chan *job.Job) {
 }
 
 func scheduleScrappers(jobsStream chan *job.Job) {
-	go scrapers.GetWhoIsHiringJobs(jobsStream, config.GetConfig("whoishiring"))
+	fetchFrom, err := strconv.ParseInt(config.GetConfig("fetchFrom"), 10, 64)
+
+	if err != nil {
+		loggerInstance.Panicln(err.Error())
+	}
+
+	fetchFrom = (time.Now().Unix() * 1000) - (fetchFrom * 24 * 3600000)
+
+	go scrapers.GetWhoIsHiringJobs(jobsStream, config.GetConfig("whoishiring"), fetchFrom)
 }
 
 func init() {

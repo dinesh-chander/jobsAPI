@@ -3,13 +3,15 @@ package scrapers
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"logger"
 	"models/job"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+	cronParse "utils/cronParser"
 
-	"github.com/gorhill/cronexpr"
 	"github.com/tidwall/gjson"
 )
 
@@ -33,23 +35,71 @@ type whoIsHiringJobStruct struct {
 	Visa            bool
 }
 
-var loggerInstance = logger.Logger
+var channelName string
+var loggerInstance *log.Logger
 
-func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string) {
-	expr := cronexpr.MustParse(scheduleAt)
+func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string, fetchFrom int64) {
+
+	expr := cronParse.Parse(scheduleAt)
+
+	timestampOfLastEntryInDB := job.FindLastAddedEntryTimestampForSource(channelName)
+
+	if timestampOfLastEntryInDB > fetchFrom {
+		fetchFrom = timestampOfLastEntryInDB
+	}
 
 	for {
-		jobsList := makeRequestForNewJobs()
+
+		jobsList := makeRequestForNewJobs(fetchFrom)
 
 		for _, jobDetails := range jobsList {
-			go func(newJob *whoIsHiringJobStruct) {
-				jobsStream <- convertToStandardJobStruct(newJob)
-			}(jobDetails)
+			jobsStream <- convertToStandardJobStruct(jobDetails)
 		}
 
 		nextTime := expr.Next(time.Now())
 		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
+		fetchFrom = job.FindLastAddedEntryTimestampForSource(channelName)
 	}
+}
+
+func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64) (jobsList [](*whoIsHiringJobStruct)) {
+	httpClient := &http.Client{
+		Timeout: time.Second * 120,
+	}
+
+	postData := `{"query":{"bool":{"must":[],"should":[],"must_not":[],"filter":{"bool":{"must":[{"geo_bounding_box":{"location":{"bottom_left":{"lat":-70.8676081294354,"lon":123.61865624999996},"top_right":{"lat":83.82242395874371,"lon":-156.57665625000004}}}},{"range":{"time":{"gt":` + strconv.FormatInt(lastFetchedJobTimeInMilliSeconds, 10) + `}}}],"should":[],"must_not":[]}}}},"sort":[{"time":{"order":"desc","mode":"min"}}],"size":20000}`
+
+	postDataReader := strings.NewReader(postData)
+	response, err := httpClient.Post("https://search.whoishiring.io/item/item/_search?scroll=10m", "application/x-www-form-urlencoded", postDataReader)
+
+	if (err != nil) || (response.StatusCode != 200) {
+		loggerInstance.Println(err)
+	} else {
+		responseBody, readErr := ioutil.ReadAll(response.Body)
+
+		if readErr != nil {
+			loggerInstance.Println("Response Body read error")
+		} else {
+			hits := gjson.GetBytes(responseBody, "hits.hits")
+			jobsList = [](*whoIsHiringJobStruct){}
+
+			hits.ForEach(func(key, value gjson.Result) bool {
+				var jobDetails whoIsHiringJobStruct
+				jobJSON := []byte(value.Get("_source").String())
+				parseErr := json.Unmarshal(jobJSON, &jobDetails)
+
+				if parseErr != nil {
+					loggerInstance.Println("Unable to UNMARSHAL")
+				} else {
+					jobsList = append(jobsList, &jobDetails)
+				}
+
+				return true
+			})
+		}
+	}
+
+	return
 }
 
 func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Job) {
@@ -64,85 +114,16 @@ func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Jo
 	singleJob.Published_Date = newJob.Time
 	singleJob.Title = newJob.Title
 	singleJob.Source = newJob.Source
+	singleJob.Source_Name = newJob.Source_name
 	singleJob.Source_Id = newJob.Id
+	singleJob.Channel_Name = channelName
 
 	singleJob.Tags = strings.Join(newJob.Tags, " ")
 
 	return
 }
 
-func makeRequestForNewJobs() (jobsList [](*whoIsHiringJobStruct)) {
-	httpClient := &http.Client{
-		Timeout: time.Second * 30,
-	}
-
-	postDataReader := strings.NewReader(`{"query":{"bool":{"must":[],"should":[],"must_not":[],"filter":{"bool":{"must":[{"geo_bounding_box":{"location":{"bottom_left":{"lat":-70.8676081294354,"lon":123.61865624999996},"top_right":{"lat":83.82242395874371,"lon":-66.57665625000004}}}}],"should":[],"must_not":[]}}}},"sort":[{"_geo_distance":{"location":{"lat":"30.993","lon":"-151.479"},"order":"asc","unit":"km","distance_type":"plane"}},"_score",{"time":{"order":"desc","mode":"min"}}],"size":20}`)
-	response, err := httpClient.Post("https://search.whoishiring.io/item/item/_search?scroll=10m", "application/x-www-form-urlencoded", postDataReader)
-
-	if (err != nil) || (response.StatusCode != 200) {
-		loggerInstance.Println(err)
-	} else {
-		responseBody, readErr := ioutil.ReadAll(response.Body)
-
-		if readErr != nil {
-			loggerInstance.Println("Response Body read error")
-		} else {
-			hits := gjson.GetBytes(responseBody, "hits.hits")
-			jobsList = [](*whoIsHiringJobStruct){}
-
-			hits.ForEach(func(key, value gjson.Result) bool {
-				var jobDetails whoIsHiringJobStruct
-				jobJSON := []byte(value.Get("_source").String())
-				parseErr := json.Unmarshal(jobJSON, &jobDetails)
-
-				if parseErr != nil {
-					loggerInstance.Println("Unable to UNMARSHAL")
-				} else {
-					jobsList = append(jobsList, &jobDetails)
-				}
-
-				return true
-			})
-		}
-	}
-
-	return
-}
-
-func makeRequestForOldJobs() (jobsList [](*whoIsHiringJobStruct)) {
-	httpClient := &http.Client{
-		Timeout: time.Second * 30,
-	}
-
-	postDataReader := strings.NewReader(`{"query":{"bool":{"must":[],"should":[],"must_not":[],"filter":{"bool":{"must":[{"geo_bounding_box":{"location":{"bottom_left":{"lat":-70.8676081294354,"lon":123.61865624999996},"top_right":{"lat":83.82242395874371,"lon":-66.57665625000004}}}}],"should":[],"must_not":[]}}}},"sort":[{"_geo_distance":{"location":{"lat":"30.993","lon":"-151.479"},"order":"asc","unit":"km","distance_type":"plane"}},"_score",{"time":{"order":"desc","mode":"min"}}],"size":20}`)
-	response, err := httpClient.Post("https://search.whoishiring.io/item/item/_search?scroll=10m", "application/x-www-form-urlencoded", postDataReader)
-
-	if (err != nil) || (response.StatusCode != 200) {
-		loggerInstance.Println(err)
-	} else {
-		responseBody, readErr := ioutil.ReadAll(response.Body)
-
-		if readErr != nil {
-			loggerInstance.Println("Response Body read error")
-		} else {
-			hits := gjson.GetBytes(responseBody, "hits.hits")
-			jobsList = [](*whoIsHiringJobStruct){}
-
-			hits.ForEach(func(key, value gjson.Result) bool {
-				var jobDetails whoIsHiringJobStruct
-				jobJSON := []byte(value.Get("_source").String())
-				parseErr := json.Unmarshal(jobJSON, &jobDetails)
-
-				if parseErr != nil {
-					loggerInstance.Println("Unable to UNMARSHAL")
-				} else {
-					jobsList = append(jobsList, &jobDetails)
-				}
-
-				return true
-			})
-		}
-	}
-
-	return
+func init() {
+	channelName = "whoishiring"
+	loggerInstance = logger.Logger
 }

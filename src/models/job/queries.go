@@ -70,6 +70,17 @@ func GetJobsCount() (count int) {
 	return count
 }
 
+func FindLastAddedEntryTimestampForSource(channelName string) (lastPublishedAt int64) {
+	tx := db.Begin()
+	defer tx.Commit()
+
+	row := tx.Table(tableName).Select("max(published_date)").Where("channel_name == ?", channelName).Row()
+
+	row.Scan(&lastPublishedAt)
+
+	return
+}
+
 func findFromNormalTable(searchQuerySQLString string) (searchResult []Job) {
 
 	tx := db.Begin()

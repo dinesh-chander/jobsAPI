@@ -16,6 +16,7 @@ type Job struct {
 	gorm.Model
 	Title          string
 	Address        string
+	Channel_Name   string
 	City           string
 	Company        string
 	Country        string
@@ -24,6 +25,7 @@ type Job struct {
 	Compensation   string
 	Is_Remote      bool
 	Source         string
+	Source_Name    string
 	Source_Id      string `gorm:"unique_index"`
 	Tags           string
 	Approved       bool
@@ -62,11 +64,15 @@ func init() {
 	db, databaseCreationErr = gorm.Open("sqlite3", "job.db")
 	db.LogMode(false)
 
-	db.Exec("PRAGMA synchronous = NORMAL")
-	db.Exec("PRAGMA cache_size = -8000000")
-	db.Exec("PRAGMA read_uncommitted = true")
-	db.Exec("PRAGMA parser_trace = false")
-	db.Exec("PRAGMA journal_mode = MEMORY")
+	db.Exec(`
+        PRAGMA automatic_index = true;
+        PRAGMA synchronous = false;
+	    PRAGMA cache_size = 32768;
+        PRAGMA cache_spill = false;
+	    PRAGMA read_uncommitted = true;
+	    PRAGMA parser_trace = false;
+	    PRAGMA journal_mode = MEMORY;
+	    PRAGMA foreign_keys = false;`)
 
 	db.SingularTable(true)
 
@@ -91,7 +97,7 @@ func createSearchTable() {
 		loggerInstance.Fatalln(err.Error())
 	}
 
-	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(ID, Title, Company, Description, Location, Tags)", searchTableName)).Error
+	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(ID, Title, Company, Description, Location, Tags, tokenize = 'porter unicode61 remove_diacritics 1')", searchTableName)).Error
 
 	if tableCreationErr != nil {
 		loggerInstance.Fatalln(tableCreationErr.Error())
@@ -125,16 +131,24 @@ func migrateJobRowsToSearchableContent() {
 
 	jobsList := GetAll()
 
-	db.Exec("BEGIN TRANSACTION")
+	tx := db.Begin()
+	defer tx.Commit()
+
+	var newSearchableContent *SearchableContent
+	var insertErr error
 
 	for _, job := range jobsList {
 		if indexEntriesOfLastXDays != 0 {
 			if job.Published_Date > indexEntriesOfLastXDays {
-				addSearchableContent(&job)
+				newSearchableContent = addSearchableContent(&job)
+				insertErr = tx.Create(newSearchableContent).Error
+
+				if insertErr != nil {
+					loggerInstance.Println(insertErr.Error())
+				}
 			}
 		}
 	}
 
-	db.Exec("COMMIT TRANSACTION")
 	loggerInstance.Println("Migration Complete")
 }

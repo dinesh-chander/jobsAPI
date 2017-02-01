@@ -4,12 +4,12 @@ import (
 	"config"
 	"strconv"
 	"time"
-
-	"github.com/gorhill/cronexpr"
+	"utils/cronParser"
 )
 
 func removeOlderEntries() {
 	var indexEntriesOfLastXDays int64
+	var removeOlderEntriesThen int64
 
 	if config.GetConfig("indexEntriesOfLastXDays") != "" {
 		var err error
@@ -27,21 +27,21 @@ func removeOlderEntries() {
 
 	scheduleAt := config.GetConfig("removeOlderIndexes")
 
-	expr := cronexpr.MustParse(scheduleAt)
+	expr := cronParser.Parse(scheduleAt)
 
 	if indexEntriesOfLastXDays != 0 {
 		for {
 			nextTime := expr.Next(time.Now())
 			time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
-			indexEntriesOfLastXDays = (time.Now().Unix() - (indexEntriesOfLastXDays * 24 * 3600)) * 1000
-			go makeDeleteFromDBOperation(indexEntriesOfLastXDays)
+			removeOlderEntriesThen = (time.Now().Unix() - (indexEntriesOfLastXDays * 24 * 3600)) * 1000
+			go makeDeleteFromDBOperation(removeOlderEntriesThen)
 		}
 	}
 }
 
 func makeDeleteFromDBOperation(lastValidTimestamp int64) {
 	tx := db.Begin()
-	rows, selectErr := tx.Table(tableName).Select("source_id").Where("published_date > ?", lastValidTimestamp).Rows()
+	rows, selectErr := tx.Table(tableName).Select("source_id, published_date").Where("published_date < ?", lastValidTimestamp).Rows()
 
 	defer rows.Close()
 	defer tx.Commit()
@@ -57,7 +57,6 @@ func makeDeleteFromDBOperation(lastValidTimestamp int64) {
 				loggerInstance.Println(scanErr.Error())
 			} else {
 				err := tx.Unscoped().Where("id = ?", newJob.Source_Id).Delete(&SearchableContent{}).Error
-
 				if err != nil {
 					loggerInstance.Println(err.Error())
 				}
