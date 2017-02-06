@@ -7,13 +7,12 @@ import (
 
 func pathHandler(response http.ResponseWriter, request *http.Request) {
 	if routeRegistry.RouteRegistry[request.URL.Path] != nil {
-		routeRegistry.RouteRegistry[request.URL.Path](response, request)
-	} else {
-		defaultHandler(response, request)
-	}
-}
+		errMsg, errCode := (routeRegistry.RouteRegistry[request.URL.Path](response, request))
 
-func defaultHandler(response http.ResponseWriter, _ *http.Request) {
-	response.WriteHeader(404)
-	response.Write([]byte("Path or Method not found"))
+		if errMsg != "" {
+			http.Error(response, errMsg, errCode)
+		}
+	} else {
+		http.Error(response, "Path or Method not found", 400)
+	}
 }

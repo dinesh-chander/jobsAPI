@@ -17,13 +17,13 @@ func removeOlderEntries() {
 		indexEntriesOfLastXDays, err = strconv.ParseInt(config.GetConfig("indexEntriesOfLastXDays"), 10, 64)
 
 		if err != nil {
-			loggerInstance.Panicln("invalid value for 'indexEntriesOfLastXDays' in config. Value is :", config.GetConfig("indexEntriesOfLastXDays"))
+			loggerInstance.Panicln("invalid value for 'indexEntriesOfLastXDays' in config. Value is:", config.GetConfig("indexEntriesOfLastXDays"))
 		}
 	} else {
 		indexEntriesOfLastXDays = 0 // index everything
 	}
 
-	loggerInstance.Println("Indexing Entries for last :", indexEntriesOfLastXDays, "Days")
+	loggerInstance.Println("Indexing Entries for last:", indexEntriesOfLastXDays, "Days")
 
 	scheduleAt := config.GetConfig("removeOlderIndexes")
 

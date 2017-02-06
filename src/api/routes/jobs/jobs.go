@@ -16,11 +16,17 @@ import (
 var loggerInstance *log.Logger
 var gzipSupport bool
 
-func getAllJobs(response http.ResponseWriter, request *http.Request) {
+func getAllJobs(response http.ResponseWriter, request *http.Request) (errMsg string, errCode int) {
 	if request.Method == "GET" {
 
 		query := &jobInterface.Query{}
-		query.ParseQueryParamsFromURL(request.URL)
+		parseErr := query.ParseQueryParamsFromURL(request.URL)
+
+		if parseErr != nil {
+			errMsg = parseErr.Error()
+			errCode = 400
+			return
+		}
 
 		resultList := jobModel.FindContent(query)
 
@@ -37,6 +43,7 @@ func getAllJobs(response http.ResponseWriter, request *http.Request) {
 			defer func() {
 				// gzr.w.Close will write a footer even if no data has been written.
 				// StatusNotModified and StatusNoContent expect an empty body so don't close it.
+
 				if gzr.StatusCode != http.StatusNotModified && gzr.StatusCode != http.StatusNoContent {
 					if err := gzr.GW.Close(); err != nil {
 						loggerInstance.Println(err.Error())
@@ -53,11 +60,13 @@ func getAllJobs(response http.ResponseWriter, request *http.Request) {
 			response.WriteHeader(http.StatusOK)
 			response.Write(responseData)
 		}
-
 	} else {
-		errMsg := []byte("Wrong Method for the endpoint")
-		response.Write(errMsg)
+		errMsg = "Wrong Method for the endpoint"
+		errCode = 400
+		return
 	}
+
+	return
 }
 
 func init() {

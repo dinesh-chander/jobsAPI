@@ -15,14 +15,14 @@ func AddJob(newJob *Job) {
 
 	defer tx.Commit()
 
-	insertErr = tx.Create(newJob).Error
+	insertErr = tx.Table(tableName).Create(newJob).Error
 
 	if insertErr != nil {
 		loggerInstance.Println(insertErr.Error())
 	} else {
-		newSearchableContent := addSearchableContent(newJob)
 
-		insertErr = tx.Create(newSearchableContent).Error
+		newSearchableContent := addSearchableContent(newJob)
+		insertErr = tx.Table(searchTableName).Create(newSearchableContent).Error
 
 		if insertErr != nil {
 			loggerInstance.Println(insertErr.Error())
@@ -31,6 +31,7 @@ func AddJob(newJob *Job) {
 }
 
 func addSearchableContent(newJob *Job) (newSearchableContent *SearchableContent) {
+
 	location := newJob.Address
 
 	if newJob.City != "" {
@@ -54,23 +55,27 @@ func addSearchableContent(newJob *Job) (newSearchableContent *SearchableContent)
 }
 
 func GetAll() (jobsList []Job) {
+
 	jobsList = []Job{}
 	db.Find(&jobsList)
 	return
 }
 
 func GetJob() *Job {
+
 	var job Job
 	db.First(&job)
 	return &job
 }
 
 func GetJobsCount() (count int) {
+
 	db.Table(tableName).Count(&count)
 	return count
 }
 
 func FindLastAddedEntryTimestampForSource(channelName string) (lastPublishedAt int64) {
+
 	tx := db.Begin()
 	defer tx.Commit()
 
@@ -81,41 +86,32 @@ func FindLastAddedEntryTimestampForSource(channelName string) (lastPublishedAt i
 	return
 }
 
-func findFromNormalTable(searchQuerySQLString string) (searchResult []Job) {
+func findFromNormalTable(searchCondition string, resultListLength int, offset int) (searchResult []Job) {
+
+	searchResult = []Job{}
 
 	tx := db.Begin()
-	rows, err := tx.Raw(searchQuerySQLString).Rows()
-
-	defer rows.Close()
 	defer tx.Commit()
+
+	searchResult = make([]Job, resultListLength)
+
+	err := tx.Table(tableName).Limit(resultListLength).Offset(offset).Find(&searchResult, searchCondition).Error
 
 	if err != nil {
 		loggerInstance.Println(err.Error())
 		return
-	}
-
-	searchResult = []Job{}
-
-	for rows.Next() {
-		var newJob Job
-		scanErr := tx.ScanRows(rows, &newJob)
-
-		if scanErr != nil {
-			loggerInstance.Println(scanErr.Error())
-		} else {
-			searchResult = append(searchResult, newJob)
-		}
 	}
 
 	return
 }
 
-func findFromSearchableTable(searchQuerySQLString string) (searchResult []Job) {
+func findFromSearchableTable(searchSQLQuery string, resultListLength int, offset int) (searchResult []Job) {
 
-	loggerInstance.Println(searchQuerySQLString)
+	searchResult = []Job{}
 
 	tx := db.Begin()
-	rows, err := tx.Raw(searchQuerySQLString).Rows()
+
+	rows, err := tx.Table(searchTableName).Limit(resultListLength).Offset(offset).Order("rank DESC").Raw(searchSQLQuery).Rows()
 
 	defer rows.Close()
 	defer tx.Commit()
@@ -125,18 +121,42 @@ func findFromSearchableTable(searchQuerySQLString string) (searchResult []Job) {
 		return
 	}
 
-	var ID string
-	searchResult = []Job{}
+	var id string
+	var index int = 0
+
+	matchedIDs := make([]string, resultListLength)
 
 	for rows.Next() {
-		scanErr := rows.Scan(&ID)
+
+		scanErr := rows.Scan(&id)
 
 		if scanErr != nil {
 			loggerInstance.Println(scanErr.Error())
 		} else {
-			var newJob Job
-			tx.First(&newJob, "Source_Id = ?", ID)
-			searchResult = append(searchResult, newJob)
+			if id != "" {
+				matchedIDs[index] = "'" + id + "'"
+				index = index + 1
+			}
+		}
+	}
+
+	if index > 0 {
+		var separator string
+		matchedIDs = matchedIDs[:index]
+
+		if index > 1 {
+			separator = ","
+		}
+
+		idsList := "(" + strings.Join(matchedIDs, separator) + ")"
+
+		searchResult = make([]Job, index)
+
+		fetchErr := tx.Table(tableName).Find(&searchResult, ("source_id in " + idsList)).Error
+
+		if fetchErr != nil {
+			loggerInstance.Println(fetchErr.Error())
+			return
 		}
 	}
 
@@ -148,12 +168,16 @@ func FindContent(searchQuery *jobInterface.Query) (searchResult []Job) {
 	var searchQuerySQLString string
 	searchString := buildSearchString(searchQuery)
 
+	if searchQuery.Limit == 0 {
+		searchResult = []Job{}
+		return
+	}
+
 	if searchString != "" {
-		searchQuerySQLString = fmt.Sprintf("SELECT DISTINCT(ID) FROM %s WHERE %s MATCH %s ORDER BY rank", searchTableName, searchTableName, searchString)
-		return findFromSearchableTable(searchQuerySQLString)
+		searchQuerySQLString = fmt.Sprintf(`SELECT DISTINCT(id) from "%s" WHERE "%s" MATCH '%s'`, searchTableName, searchTableName, searchString)
+		return findFromSearchableTable(searchQuerySQLString, searchQuery.Limit, searchQuery.Skip)
 	} else {
-		searchQuerySQLString = fmt.Sprintf("SELECT * FROM %s", tableName)
-		return findFromNormalTable(searchQuerySQLString)
+		return findFromNormalTable("", searchQuery.Limit, searchQuery.Skip)
 	}
 }
 
@@ -161,10 +185,11 @@ func buildSearchString(searchQuery *jobInterface.Query) (searchString string) {
 
 	queryStringList := [5]string{}
 
-	queryStringList[0] = formatSearchQuery(searchQuery.Location, "Location")
-	queryStringList[1] = formatSearchQuery(searchQuery.Company, "Company")
+	queryStringList[0] = formatSearchQuery(searchQuery.Locations, "Location")
+	queryStringList[1] = formatSearchQuery(searchQuery.Companies, "Company")
 	queryStringList[2] = formatSearchQuery(searchQuery.Tags, "Tags")
-	queryStringList[3] = formatSearchQuery(searchQuery.Title, "Title")
+	queryStringList[3] = formatSearchQuery(searchQuery.Titles, "Title")
+	queryStringList[4] = formatSearchQuery(searchQuery.Keywords, "Description")
 
 	for _, value := range queryStringList {
 		if value != "" {
@@ -174,10 +199,6 @@ func buildSearchString(searchQuery *jobInterface.Query) (searchString string) {
 				searchString = value
 			}
 		}
-	}
-
-	if searchString != "" {
-		searchString = "'" + searchString + "'"
 	}
 
 	return

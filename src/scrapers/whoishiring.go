@@ -11,34 +11,36 @@ import (
 	"strings"
 	"time"
 	cronParse "utils/cronParser"
+	geoUtils "utils/geoUtils"
+	miscellaneousUtils "utils/miscellaneous"
 
 	"github.com/tidwall/gjson"
 )
 
+type Location struct {
+	Lat, Lon float64
+}
+
 type whoIsHiringJobStruct struct {
-	Id              string
-	Address         string
-	Country         string
-	City            string
-	Company         string
-	Company_profile string
-	Description     string
-	Kind            string
-	Url             string
-	Title           string
-	Source          string
-	Source_name     string
-	Remote          bool
-	Time            uint64
-	Tags            []string
-	Apply           string
-	Visa            bool
+	Apply       string
+	Address     string
+	Company     string
+	Description string
+	Kind        string
+	Location    Location
+	Url         string
+	Title       string
+	Source      string
+	Source_name string
+	Remote      bool
+	Time        uint64
+	Tags        []string
 }
 
 var channelName string
 var loggerInstance *log.Logger
 
-func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string, fetchFrom int64) {
+func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string, fetchFrom int64, searchWordsList []string) {
 
 	expr := cronParse.Parse(scheduleAt)
 
@@ -50,7 +52,7 @@ func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string, fetchFrom i
 
 	for {
 
-		jobsList := makeRequestForNewJobs(fetchFrom)
+		jobsList := makeRequestForNewJobs(fetchFrom, searchWordsList)
 
 		for _, jobDetails := range jobsList {
 			jobsStream <- convertToStandardJobStruct(jobDetails)
@@ -62,12 +64,28 @@ func GetWhoIsHiringJobs(jobsStream chan *job.Job, scheduleAt string, fetchFrom i
 	}
 }
 
-func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64) (jobsList [](*whoIsHiringJobStruct)) {
+func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64, searchWordsList []string) (jobsList [](*whoIsHiringJobStruct)) {
 	httpClient := &http.Client{
-		Timeout: time.Second * 120,
+		Timeout: time.Second * 300,
 	}
 
-	postData := `{"query":{"bool":{"must":[],"should":[],"must_not":[],"filter":{"bool":{"must":[{"geo_bounding_box":{"location":{"bottom_left":{"lat":-70.8676081294354,"lon":123.61865624999996},"top_right":{"lat":83.82242395874371,"lon":-156.57665625000004}}}},{"range":{"time":{"gt":` + strconv.FormatInt(lastFetchedJobTimeInMilliSeconds, 10) + `}}}],"should":[],"must_not":[]}}}},"sort":[{"time":{"order":"desc","mode":"min"}}],"size":20000}`
+	var searchQuery string
+
+	if len(searchWordsList) > 0 {
+		searchQuery = `{"bool":{"should":[`
+
+		for index, searchWord := range searchWordsList {
+			if index == (len(searchWordsList) - 1) {
+				searchQuery = searchQuery + `{"bool":{"should":[{"match":{"title":{"query":"` + searchWord + `","boost":5,"type":"phrase"}}}]}}`
+			} else {
+				searchQuery = searchQuery + `{"bool":{"should":[{"match":{"title":{"query":"` + searchWord + `","boost":5,"type":"phrase"}}}]}},`
+			}
+		}
+
+		searchQuery = searchQuery + `],"minimum_should_match":1}}`
+	}
+
+	postData := `{"query":{"bool":{"must":[],"should":[` + searchQuery + `],"must_not":[],"filter":{"bool":{"must":[{"geo_bounding_box":{"location":{"bottom_left":{"lat":-70.8676081294354,"lon":86.70474999999999},"top_right":{"lat":83.82242395874371,"lon":-90.48275000000001}}}},{"range":{"time":{"gt":` + strconv.FormatInt(lastFetchedJobTimeInMilliSeconds, 10) + `}}}],"should":[],"must_not":[]}}}},"sort":[{"time":{"order":"desc","mode":"min"}}],"size":20000}`
 
 	postDataReader := strings.NewReader(postData)
 	response, err := httpClient.Post("https://search.whoishiring.io/item/item/_search?scroll=10m", "application/x-www-form-urlencoded", postDataReader)
@@ -78,20 +96,31 @@ func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64) (jobsList [](
 		responseBody, readErr := ioutil.ReadAll(response.Body)
 
 		if readErr != nil {
-			loggerInstance.Println("Response Body read error")
+			loggerInstance.Println(readErr.Error())
 		} else {
 			hits := gjson.GetBytes(responseBody, "hits.hits")
+
 			jobsList = [](*whoIsHiringJobStruct){}
 
 			hits.ForEach(func(key, value gjson.Result) bool {
-				var jobDetails whoIsHiringJobStruct
-				jobJSON := []byte(value.Get("_source").String())
-				parseErr := json.Unmarshal(jobJSON, &jobDetails)
 
-				if parseErr != nil {
-					loggerInstance.Println("Unable to UNMARSHAL")
-				} else {
-					jobsList = append(jobsList, &jobDetails)
+				if value.String() != "" {
+
+					if value.Get("_source").String() != "" {
+
+						var jobDetails whoIsHiringJobStruct
+						jobJSON := []byte(value.Get("_source").String())
+
+						if len(jobJSON) > 0 {
+							parseErr := json.Unmarshal(jobJSON, &jobDetails)
+
+							if parseErr != nil {
+								loggerInstance.Println(parseErr.Error(), value.Get("_source").String())
+							} else {
+								jobsList = append(jobsList, &jobDetails)
+							}
+						}
+					}
 				}
 
 				return true
@@ -108,17 +137,22 @@ func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *job.Jo
 	singleJob.Company = newJob.Company
 	singleJob.Description = newJob.Description
 	singleJob.Address = newJob.Address
-	singleJob.City = newJob.City
-	singleJob.Country = newJob.Country
 	singleJob.Is_Remote = newJob.Remote
 	singleJob.Published_Date = newJob.Time
 	singleJob.Title = newJob.Title
+	singleJob.Job_Type = newJob.Kind
 	singleJob.Source = newJob.Source
+	singleJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Title + newJob.Description)
 	singleJob.Source_Name = newJob.Source_name
-	singleJob.Source_Id = newJob.Id
+
 	singleJob.Channel_Name = channelName
 
-	singleJob.Tags = strings.Join(newJob.Tags, " ")
+	singleJob.Tags = strings.Join(newJob.Tags, " # ")
+
+	locationMap := make(map[string]string)
+	geoUtils.GetLocationFromGeoCode(newJob.Location.Lat, newJob.Location.Lon, locationMap)
+	singleJob.City = locationMap["locality"]
+	singleJob.Country = locationMap["country"]
 
 	return
 }

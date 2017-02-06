@@ -6,18 +6,15 @@ import (
 	"log"
 	"logger"
 	"models/job"
-	"net/http"
-	_ "net/http/pprof"
 	"scrapers"
 	"strconv"
+	"strings"
 	"time"
 )
 
 var loggerInstance *log.Logger
 
 func main() {
-
-	go http.ListenAndServe(":8081", nil)
 
 	jobsStream := make(chan *job.Job, 500)
 
@@ -29,10 +26,20 @@ func main() {
 }
 
 func updateNewJobs(jobsStream chan *job.Job) {
+	searchWordsList := strings.Split(config.GetConfig("validWords"), ",")
+
 	for {
 		select {
 		case newJob := <-jobsStream:
-			job.AddJob(newJob)
+
+			go func(newJob *job.Job) {
+				for _, searchWord := range searchWordsList {
+					if strings.Contains(strings.ToUpper(newJob.Title), strings.ToUpper(searchWord)) {
+						job.AddJob(newJob)
+						break
+					}
+				}
+			}(newJob)
 		}
 	}
 }
@@ -46,7 +53,9 @@ func scheduleScrappers(jobsStream chan *job.Job) {
 
 	fetchFrom = (time.Now().Unix() * 1000) - (fetchFrom * 24 * 3600000)
 
-	go scrapers.GetWhoIsHiringJobs(jobsStream, config.GetConfig("whoishiring"), fetchFrom)
+	searchWordsList := strings.Split(config.GetConfig("validWords"), ",")
+
+	go scrapers.GetWhoIsHiringJobs(jobsStream, config.GetConfig("whoishiring"), fetchFrom, searchWordsList)
 }
 
 func init() {

@@ -14,12 +14,14 @@ import (
 
 type Job struct {
 	gorm.Model
+	Apply          string
 	Title          string
 	Address        string
 	Channel_Name   string
 	City           string
 	Company        string
 	Country        string
+	Job_Type       string
 	Description    string
 	Published_Date uint64
 	Compensation   string
@@ -57,12 +59,17 @@ func init() {
 	var databaseCreationErr error
 	var tableCreationErr error
 
-	tableName = "dev_jobs"
-	searchTableName = "searchable_content"
+	tableName = config.GetConfig("tableNamePrefix") + "jobs"
+	searchTableName = config.GetConfig("tableNamePrefix") + "searchable_content"
 	loggerInstance = logger.Logger
 
 	db, databaseCreationErr = gorm.Open("sqlite3", "job.db")
-	db.LogMode(false)
+
+	if config.GetConfig("dbQueryLog") == "true" {
+		db.LogMode(true)
+	} else {
+		db.LogMode(false)
+	}
 
 	db.Exec(`
         PRAGMA automatic_index = true;
@@ -141,7 +148,7 @@ func migrateJobRowsToSearchableContent() {
 		if indexEntriesOfLastXDays != 0 {
 			if job.Published_Date > indexEntriesOfLastXDays {
 				newSearchableContent = addSearchableContent(&job)
-				insertErr = tx.Create(newSearchableContent).Error
+				insertErr = tx.Table(searchTableName).Create(newSearchableContent).Error
 
 				if insertErr != nil {
 					loggerInstance.Println(insertErr.Error())
