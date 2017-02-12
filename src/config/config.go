@@ -1,16 +1,20 @@
 package config
 
-var (
-	config = make(map[string]string)
-)
+//
+//import (
+//	viper "github.com/spf13/viper"
+//)
+
+var config map[string]string
 
 func GetConfig(configProperty string) (value string) {
 	return config[configProperty]
 }
 
 func init() {
+	config = make(map[string]string)
 
-	config["mode"] = "production"
+	config["mode"] = "development"
 
 	if config["mode"] == "development" {
 
@@ -19,20 +23,25 @@ func init() {
 		config["interface"] = "localhost"
 		config["port"] = "9080"
 		config["gzip"] = "false"
+		config["jobManagersCount"] = "3"
 
 		config["tableNamePrefix"] = "dev_"
 
-		config["fetchFrom"] = "10" // default 0 means fetch today's data
+		config["fetchFrom"] = "1" // default 0 means fetch today's data
 		config["translateToEnglish"] = "false"
 
 		config["indexEntriesOfLastXDays"] = "30" // default 0 means index all
 
+		config["dbDir"] = "db"
 		config["dbQueryLog"] = "true"
-		config["disableLog"] = "true"
+		config["disableLog"] = "false"
+		config["logsDir"] = "logs"
+		config["logsFile"] = "logs.log"
+
 		config["removeOlderIndexes"] = "0-59/30 * * * * *"
 
-		config["googleGeoAPIKey"] = "AIzaSyDunhBDEvzMh1Zijn3fcMVzmegDCCa9L1E"
-		config["validWords"] = " junior , entry "
+		config["googleGeoAPIKey"] = "AIzaSyA87A0cCVeQR1yCbeLjitQlWRzg1hYqQyw"
+		config["validWords"] = "junior"
 
 	} else if config["mode"] == "production" {
 
@@ -41,19 +50,24 @@ func init() {
 		config["interface"] = "localhost"
 		config["port"] = "8080"
 		config["gzip"] = "true"
+		config["jobManagersCount"] = "3"
 
 		config["tableNamePrefix"] = ""
 
-		config["fetchFrom"] = "60" // default 0 means fetch today's data
+		config["fetchFrom"] = "120" // default 0 means fetch today's data
 		config["translateToEnglish"] = "false"
 
-		config["indexEntriesOfLastXDays"] = "60" // default 0 means index all
+		config["indexEntriesOfLastXDays"] = "75" // default 0 means index all
 
-		config["dbQueryLog"] = "false"
+		config["dbDir"] = "db"
+		config["dbQueryLog"] = "true"
 		config["disableLog"] = "false"
+		config["logsDir"] = "logs"
+		config["logsFile"] = "logs.log"
+
 		config["removeOlderIndexes"] = "0-23/12 * * * *"
 
 		config["googleGeoAPIKey"] = "AIzaSyDunhBDEvzMh1Zijn3fcMVzmegDCCa9L1E"
-		config["validWords"] = " junior , entry "
+		config["validWords"] = "junior"
 	}
 }

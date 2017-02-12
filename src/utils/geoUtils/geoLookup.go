@@ -12,7 +12,7 @@ import (
 var loggerInstance *log.Logger
 var googleMapsClient *maps.Client
 
-func GetLocationFromGeoCode(lat float64, lon float64, locationMap map[string]string) {
+func GetLocationFromCoordinates(lat float64, lon float64, locationMap map[string]string) {
 
 	reverseGeoCodeRequest := &maps.GeocodingRequest{
 		LatLng: &maps.LatLng{
@@ -28,6 +28,28 @@ func GetLocationFromGeoCode(lat float64, lon float64, locationMap map[string]str
 	} else {
 
 		addressComponentsList := reverseGeoCodeResponse[0].AddressComponents
+
+		for _, addressComponent := range addressComponentsList {
+			for _, addressType := range addressComponent.Types {
+				locationMap[addressType] = addressComponent.LongName
+			}
+		}
+	}
+}
+
+func GetLocationFromPlaceName(placeName string, locationMap map[string]string) {
+
+	geoCodeRequest := &maps.GeocodingRequest{
+		Address: placeName,
+	}
+
+	geoCodeResponse, requestErr := googleMapsClient.Geocode(context.Background(), geoCodeRequest)
+
+	if requestErr != nil {
+		loggerInstance.Println(requestErr.Error())
+	} else {
+
+		addressComponentsList := geoCodeResponse[0].AddressComponents
 
 		for _, addressComponent := range addressComponentsList {
 			for _, addressType := range addressComponent.Types {

@@ -4,6 +4,7 @@ import (
 	"config"
 	"strconv"
 	"time"
+	jobType "types/jobs"
 	"utils/cronParser"
 )
 
@@ -50,13 +51,13 @@ func makeDeleteFromDBOperation(lastValidTimestamp int64) {
 		loggerInstance.Println(selectErr.Error())
 	} else {
 		for rows.Next() {
-			var newJob Job
+			var newJob jobType.Job
 			scanErr := tx.ScanRows(rows, &newJob)
 
 			if scanErr != nil {
 				loggerInstance.Println(scanErr.Error())
 			} else {
-				err := tx.Unscoped().Where("id = ?", newJob.Source_Id).Delete(&SearchableContent{}).Error
+				err := tx.Table(searchTableName).Unscoped().Where("id = ?", newJob.Source_Id).Delete(&jobType.SearchableContent{}).Error
 				if err != nil {
 					loggerInstance.Println(err.Error())
 				}

@@ -10,41 +10,45 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	jobTypes "types/jobs"
 )
 
 var loggerInstance *log.Logger
 
 func main() {
 
-	jobsStream := make(chan *job.Job, 500)
+	jobsStream := make(chan *jobTypes.Job, 500)
 
-	go updateNewJobs(jobsStream)
+	jobManagersCount, err := strconv.ParseInt(config.GetConfig("jobManagersCount"), 10, 64)
+
+	if err != nil {
+		loggerInstance.Panicln(err.Error())
+	}
+
+	if jobManagersCount == 0 {
+		jobManagersCount = 1
+	}
+
+	for jobManagersCount > 0 {
+		go updateNewJobs(jobsStream)
+		jobManagersCount = jobManagersCount - 1
+	}
 
 	scheduleScrappers(jobsStream)
 
 	api.StartServer()
 }
 
-func updateNewJobs(jobsStream chan *job.Job) {
-	searchWordsList := strings.Split(config.GetConfig("validWords"), ",")
-
+func updateNewJobs(jobsStream chan *jobTypes.Job) {
 	for {
 		select {
 		case newJob := <-jobsStream:
-
-			go func(newJob *job.Job) {
-				for _, searchWord := range searchWordsList {
-					if strings.Contains(strings.ToUpper(newJob.Title), strings.ToUpper(searchWord)) {
-						job.AddJob(newJob)
-						break
-					}
-				}
-			}(newJob)
+			go job.AddJob(newJob)
 		}
 	}
 }
 
-func scheduleScrappers(jobsStream chan *job.Job) {
+func scheduleScrappers(jobsStream chan *jobTypes.Job) {
 	fetchFrom, err := strconv.ParseInt(config.GetConfig("fetchFrom"), 10, 64)
 
 	if err != nil {
@@ -55,7 +59,7 @@ func scheduleScrappers(jobsStream chan *job.Job) {
 
 	searchWordsList := strings.Split(config.GetConfig("validWords"), ",")
 
-	go scrapers.GetWhoIsHiringJobs(jobsStream, config.GetConfig("whoishiring"), fetchFrom, searchWordsList)
+	scrapers.InitiallizeScrappers(jobsStream, fetchFrom, searchWordsList)
 }
 
 func init() {

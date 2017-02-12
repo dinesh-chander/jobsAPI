@@ -2,12 +2,12 @@ package job
 
 import (
 	"fmt"
-	jobInterface "interfaces/jobs"
 	"strconv"
 	"strings"
+	jobType "types/jobs"
 )
 
-func AddJob(newJob *Job) {
+func AddJob(newJob *jobType.Job) {
 
 	var insertErr error
 
@@ -30,42 +30,32 @@ func AddJob(newJob *Job) {
 	}
 }
 
-func addSearchableContent(newJob *Job) (newSearchableContent *SearchableContent) {
-
-	location := newJob.Address
+func addSearchableContent(newJob *jobType.Job) (newSearchableContent *jobType.SearchableContent) {
+	var location string
 
 	if newJob.City != "" {
-		location = location + " " + newJob.City
+		location = newJob.City
 	}
 
 	if newJob.Country != "" {
-		location = location + " " + newJob.Country
+		location = location + " , " + newJob.Country
 	}
 
-	newSearchableContent = &SearchableContent{
+	newSearchableContent = &jobType.SearchableContent{
 		ID:          newJob.Source_Id,
 		Title:       newJob.Title,
-		Company:     newJob.Company,
 		Description: newJob.Description,
 		Location:    location,
-		Tags:        newJob.Tags,
 	}
 
 	return
 }
 
-func GetAll() (jobsList []Job) {
+func GetAll() (jobsList []jobType.Job) {
 
-	jobsList = []Job{}
-	db.Find(&jobsList)
+	jobsList = []jobType.Job{}
+	db.Table(tableName).Find(&jobsList)
 	return
-}
-
-func GetJob() *Job {
-
-	var job Job
-	db.First(&job)
-	return &job
 }
 
 func GetJobsCount() (count int) {
@@ -86,14 +76,14 @@ func FindLastAddedEntryTimestampForSource(channelName string) (lastPublishedAt i
 	return
 }
 
-func findFromNormalTable(searchCondition string, resultListLength int, offset int) (searchResult []Job) {
+func findFromNormalTable(searchCondition string, resultListLength int, offset int) (searchResult []jobType.Job) {
 
-	searchResult = []Job{}
+	searchResult = []jobType.Job{}
 
 	tx := db.Begin()
 	defer tx.Commit()
 
-	searchResult = make([]Job, resultListLength)
+	searchResult = make([]jobType.Job, resultListLength)
 
 	err := tx.Table(tableName).Limit(resultListLength).Offset(offset).Find(&searchResult, searchCondition).Error
 
@@ -105,9 +95,9 @@ func findFromNormalTable(searchCondition string, resultListLength int, offset in
 	return
 }
 
-func findFromSearchableTable(searchSQLQuery string, resultListLength int, offset int) (searchResult []Job) {
+func findFromSearchableTable(searchSQLQuery string, resultListLength int, offset int) (searchResult []jobType.Job) {
 
-	searchResult = []Job{}
+	searchResult = []jobType.Job{}
 
 	tx := db.Begin()
 
@@ -150,7 +140,7 @@ func findFromSearchableTable(searchSQLQuery string, resultListLength int, offset
 
 		idsList := "(" + strings.Join(matchedIDs, separator) + ")"
 
-		searchResult = make([]Job, index)
+		searchResult = make([]jobType.Job, index)
 
 		fetchErr := tx.Table(tableName).Find(&searchResult, ("source_id in " + idsList)).Error
 
@@ -163,13 +153,13 @@ func findFromSearchableTable(searchSQLQuery string, resultListLength int, offset
 	return
 }
 
-func FindContent(searchQuery *jobInterface.Query) (searchResult []Job) {
+func FindContent(searchQuery *jobType.Query) (searchResult []jobType.Job) {
 
 	var searchQuerySQLString string
 	searchString := buildSearchString(searchQuery)
 
 	if searchQuery.Limit == 0 {
-		searchResult = []Job{}
+		searchResult = []jobType.Job{}
 		return
 	}
 
@@ -181,15 +171,16 @@ func FindContent(searchQuery *jobInterface.Query) (searchResult []Job) {
 	}
 }
 
-func buildSearchString(searchQuery *jobInterface.Query) (searchString string) {
+func buildSearchString(searchQuery *jobType.Query) (searchString string) {
 
-	queryStringList := [5]string{}
+	queryStringList := [3]string{}
 
 	queryStringList[0] = formatSearchQuery(searchQuery.Locations, "Location")
-	queryStringList[1] = formatSearchQuery(searchQuery.Companies, "Company")
-	queryStringList[2] = formatSearchQuery(searchQuery.Tags, "Tags")
-	queryStringList[3] = formatSearchQuery(searchQuery.Titles, "Title")
-	queryStringList[4] = formatSearchQuery(searchQuery.Keywords, "Description")
+	queryStringList[1] = formatSearchQuery(searchQuery.Titles, "Title")
+	queryStringList[2] = formatSearchQuery(searchQuery.Keywords, "Description")
+
+	//  queryStringList[1] = formatSearchQuery(searchQuery.Companies, "Company")
+	//	queryStringList[2] = formatSearchQuery(searchQuery.Tags, "Tags")
 
 	for _, value := range queryStringList {
 		if value != "" {

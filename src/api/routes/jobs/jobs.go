@@ -4,12 +4,12 @@ import (
 	routesRegistry "api/routesRegistry"
 	"config"
 	"encoding/json"
-	jobInterface "interfaces/jobs"
 	"log"
 	"logger"
 	jobModel "models/job"
 	http "net/http"
 	"strings"
+	jobType "types/jobs"
 	httpUtils "utils/httpUtils"
 )
 
@@ -17,25 +17,29 @@ var loggerInstance *log.Logger
 var gzipSupport bool
 
 func getAllJobs(response http.ResponseWriter, request *http.Request) (errMsg string, errCode int) {
+
 	if request.Method == "GET" {
 
-		query := &jobInterface.Query{}
+		query := &jobType.Query{}
 		parseErr := query.ParseQueryParamsFromURL(request.URL)
 
 		if parseErr != nil {
+
 			errMsg = parseErr.Error()
 			errCode = 400
 			return
 		}
 
 		resultList := jobModel.FindContent(query)
-
-		responseData, marshallingErr := json.Marshal(resultList)
+		finalResult := jobType.ConvertToResponse(resultList)
+		responseData, marshallingErr := json.Marshal(finalResult)
 
 		if marshallingErr != nil {
+
 			response.WriteHeader(http.StatusInternalServerError)
 			response.Write([]byte(marshallingErr.Error()))
 		} else if gzipSupport && strings.Contains(request.Header.Get("Accept-Encoding"), "gzip") {
+
 			gzr := httpUtils.Pool.Get().(*httpUtils.GzipResponseWriter)
 			gzr.ResponseWriter = response
 			gzr.GW.Reset(response)

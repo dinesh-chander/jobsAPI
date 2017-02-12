@@ -5,54 +5,54 @@ import (
 	"fmt"
 	"log"
 	"logger"
+	"os"
+	"path"
 	"strconv"
 	"time"
+	jobType "types/jobs"
 
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
-
-type Job struct {
-	gorm.Model
-	Apply          string
-	Title          string
-	Address        string
-	Channel_Name   string
-	City           string
-	Company        string
-	Country        string
-	Job_Type       string
-	Description    string
-	Published_Date uint64
-	Compensation   string
-	Is_Remote      bool
-	Source         string
-	Source_Name    string
-	Source_Id      string `gorm:"unique_index"`
-	Tags           string
-	Approved       bool
-}
-
-type SearchableContent struct {
-	ID          string
-	Title       string
-	Company     string
-	Description string
-	Location    string
-	Tags        string
-}
 
 var loggerInstance *log.Logger
 var db *gorm.DB
 var tableName string
 var searchTableName string
 
-func (Job) TableName() string {
-	return tableName
+func NewJob() *jobType.Job {
+	return &jobType.Job{}
 }
 
-func NewJob() *Job {
-	return &Job{}
+func getDbPath() (dbPath string) {
+	var logsDirectory string
+
+	ex, wrongVersionErr := os.Executable()
+
+	if wrongVersionErr != nil {
+		panic(wrongVersionErr.Error())
+	}
+
+	exPath := path.Dir(ex)
+
+	logsDirectory = path.Join(path.Dir(exPath), config.GetConfig("dbDir"))
+
+	_, dirErr := os.Stat(logsDirectory)
+
+	if dirErr != nil {
+		if os.IsNotExist(dirErr) {
+
+			mkdirErr := os.Mkdir(logsDirectory, 0700)
+
+			if mkdirErr != nil {
+				panic(mkdirErr.Error())
+			}
+		} else {
+			panic(dirErr.Error())
+		}
+	}
+
+	return path.Join(logsDirectory, "job.db")
 }
 
 func init() {
@@ -63,10 +63,12 @@ func init() {
 	searchTableName = config.GetConfig("tableNamePrefix") + "searchable_content"
 	loggerInstance = logger.Logger
 
-	db, databaseCreationErr = gorm.Open("sqlite3", "job.db")
+	db, databaseCreationErr = gorm.Open("sqlite3", getDbPath())
 
 	if config.GetConfig("dbQueryLog") == "true" {
 		db.LogMode(true)
+		db.SetLogger(loggerInstance)
+
 	} else {
 		db.LogMode(false)
 	}
@@ -87,7 +89,7 @@ func init() {
 		loggerInstance.Fatalln(databaseCreationErr.Error())
 	}
 
-	tableCreationErr = db.AutoMigrate(&Job{}).Error
+	tableCreationErr = db.Table(tableName).AutoMigrate(&jobType.Job{}).Error
 
 	if tableCreationErr != nil {
 		loggerInstance.Fatalln(tableCreationErr.Error())
@@ -104,7 +106,7 @@ func createSearchTable() {
 		loggerInstance.Fatalln(err.Error())
 	}
 
-	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(ID, Title, Company, Description, Location, Tags, tokenize = 'porter unicode61 remove_diacritics 1')", searchTableName)).Error
+	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(ID, Title, Description, Location, tokenize = 'porter unicode61 remove_diacritics 1')", searchTableName)).Error
 
 	if tableCreationErr != nil {
 		loggerInstance.Fatalln(tableCreationErr.Error())
@@ -141,7 +143,7 @@ func migrateJobRowsToSearchableContent() {
 	tx := db.Begin()
 	defer tx.Commit()
 
-	var newSearchableContent *SearchableContent
+	var newSearchableContent *jobType.SearchableContent
 	var insertErr error
 
 	for _, job := range jobsList {

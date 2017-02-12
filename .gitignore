@@ -33,7 +33,13 @@ _testmain.go
 # External packages folder
 vendor/
 **/*.db
+
+.idea
+
 pkg
+db
+logs
 bin
+
 .DS_STORE
 # End of https://www.gitignore.io/api/go
