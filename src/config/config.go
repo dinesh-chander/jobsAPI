@@ -27,7 +27,7 @@ func init() {
 
 		config["tableNamePrefix"] = "dev_"
 
-		config["fetchFrom"] = "1" // default 0 means fetch today's data
+		config["fetchFrom"] = "2" // default 0 means fetch today's data
 		config["translateToEnglish"] = "false"
 
 		config["indexEntriesOfLastXDays"] = "30" // default 0 means index all
@@ -50,7 +50,7 @@ func init() {
 		config["interface"] = "localhost"
 		config["port"] = "8080"
 		config["gzip"] = "true"
-		config["jobManagersCount"] = "3"
+		config["jobManagersCount"] = "5"
 
 		config["tableNamePrefix"] = ""
 

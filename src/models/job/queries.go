@@ -85,7 +85,7 @@ func findFromNormalTable(searchCondition string, resultListLength int, offset in
 
 	searchResult = make([]jobType.Job, resultListLength)
 
-	err := tx.Table(tableName).Limit(resultListLength).Offset(offset).Find(&searchResult, searchCondition).Error
+	err := tx.Table(tableName).Limit(resultListLength).Offset(offset).Order("published_date DESC").Find(&searchResult, searchCondition).Error
 
 	if err != nil {
 		loggerInstance.Println(err.Error())
@@ -142,7 +142,7 @@ func findFromSearchableTable(searchSQLQuery string, resultListLength int, offset
 
 		searchResult = make([]jobType.Job, index)
 
-		fetchErr := tx.Table(tableName).Find(&searchResult, ("source_id in " + idsList)).Error
+		fetchErr := tx.Table(tableName).Order("published_date DESC").Find(&searchResult, ("source_id in " + idsList)).Error
 
 		if fetchErr != nil {
 			loggerInstance.Println(fetchErr.Error())
@@ -164,6 +164,7 @@ func FindContent(searchQuery *jobType.Query) (searchResult []jobType.Job) {
 	}
 
 	if searchString != "" {
+
 		searchQuerySQLString = fmt.Sprintf(`SELECT DISTINCT(id) from "%s" WHERE "%s" MATCH '%s'`, searchTableName, searchTableName, searchString)
 		return findFromSearchableTable(searchQuerySQLString, searchQuery.Limit, searchQuery.Skip)
 	} else {
@@ -183,7 +184,9 @@ func buildSearchString(searchQuery *jobType.Query) (searchString string) {
 	//	queryStringList[2] = formatSearchQuery(searchQuery.Tags, "Tags")
 
 	for _, value := range queryStringList {
+
 		if value != "" {
+
 			if searchString != "" {
 				searchString = searchString + " AND " + value
 			} else {
@@ -198,6 +201,7 @@ func buildSearchString(searchQuery *jobType.Query) (searchString string) {
 func formatSearchQuery(searchStringsList []string, propertyName string) string {
 
 	for index, value := range searchStringsList {
+
 		if index < (len(searchStringsList) - 1) {
 			searchStringsList[index] = propertyName + ":" + strconv.Quote(value) + " OR "
 		} else {

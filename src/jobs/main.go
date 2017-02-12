@@ -43,6 +43,7 @@ func updateNewJobs(jobsStream chan *jobTypes.Job) {
 	for {
 		select {
 		case newJob := <-jobsStream:
+			loggerInstance.Println("new job added")
 			go job.AddJob(newJob)
 		}
 	}
