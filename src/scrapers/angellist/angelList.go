@@ -1,90 +1,123 @@
 package angellist
 
 import (
-	"encoding/json"
-	"io"
 	"log"
 	"logger"
-	"net/http"
+	"models/job"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	jobType "types/jobs"
-	//	cronParse "utils/cronParser"
-	//	geoUtils "utils/geoUtils"
+	cronParse "utils/cronParser"
 	"utils/geoUtils"
 	miscellaneousUtils "utils/miscellaneous"
 
 	gq "github.com/PuerkitoBio/goquery"
+	"math/rand"
+	"net/http"
+	"utils/filters"
 )
 
 var channelName string
 var loggerInstance *log.Logger
-var httpClient *http.Client
+var batchSize int
 
-func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, fetchFrom int64, searchWordsList []string) {
+func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWordsList []string) {
 
-	//	expr := cronParse.Parse(scheduleAt)
+	expr := cronParse.Parse(scheduleAt)
 
-	//	for {
+	jobsURLChannel := make(chan []string, 300)
 
-	//		jobsID := findJobIdsList()
-	//		jobsURL := fetchJobsURL(jobsID)
-	//		jobsList := getJobsFromJobsURL(jobsURL)
+	go func() {
 
-	//		for _, newJob := range jobsList {
-	//			jobsStream <- newJob
-	//		}
+		for {
+			select {
+			case newURLBatch := <-jobsURLChannel:
 
-	//		nextTime := expr.Next(time.Now())
-	//		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
-	//	}
+				jobsList := getJobsFromJobsURL(newURLBatch)
+
+				for _, newJobReference := range jobsList {
+
+					if newJobReference != nil {
+						jobsStream <- newJobReference
+					}
+				}
+			}
+		}
+	}()
+
+	for {
+
+		jobsID := findJobIdsList(searchWordsList)
+
+		fetchJobsURL(jobsID, jobsURLChannel)
+
+		nextTime := expr.Next(time.Now())
+		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
+	}
 }
 
-func fetchJobsURL(idsList []int) (jobsURL []string) {
+func fetchJobsURL(idsList []int, jobsURLChannel chan []string) {
+	var lastIndex int
+	var batchedIDs []int
 
-	var startupsIds string
+	angelListURL := `https://angel.co/job_listings/browse_startups_table?`
 
-	for index, jobId := range idsList {
-		if index == len(idsList)-1 {
-			startupsIds = startupsIds + "startup_ids[]=" + strconv.Itoa(jobId)
-		} else {
-			startupsIds = startupsIds + "startup_ids[]=" + strconv.Itoa(jobId) + ","
-		}
-	}
+	for index := 0; index < len(idsList); index = index + batchSize {
 
-	if startupsIds != "" {
+		var startupsIds string
 
-		response, fetchErr := httpClient.Get(`https://angel.co/job_listings/browse_startups_table?` + startupsIds)
-		defer response.Body.Close()
+		lastIndex = index + batchSize
 
-		if fetchErr != nil {
-			loggerInstance.Println(fetchErr.Error())
-			return
+		if lastIndex >= len(idsList) {
+			lastIndex = len(idsList) - 1
 		}
 
-		jobsURL = fetchAllJobsURL(response.Body)
-	} else {
-		loggerInstance.Println("No startup id's found in the id's list")
-	}
+		batchedIDs = idsList[index:lastIndex]
 
-	return
+		for selectedIDsIndex, jobId := range batchedIDs {
+			if selectedIDsIndex == len(batchedIDs)-1 {
+				startupsIds = startupsIds + "startup_ids[]=" + strconv.Itoa(jobId)
+			} else {
+				startupsIds = startupsIds + "startup_ids[]=" + strconv.Itoa(jobId) + "&"
+			}
+		}
+
+		go func(pageParams string) {
+
+			response, fetchErr := makeRequestToAngelListServer("GET", (angelListURL + pageParams), "", nil, true)
+
+			if fetchErr != nil {
+				loggerInstance.Println(fetchErr.Error())
+				return
+			}
+
+			jobsURLList := fetchAllJobsURL(response)
+
+			response.Body.Close()
+
+			if jobsURLList != nil {
+				jobsURLChannel <- jobsURLList
+			}
+
+		}(startupsIds)
+	}
 }
 
-func fetchAllJobsURL(pageMarkup io.ReadCloser) (jobsURL []string) {
-	doc, err := gq.NewDocumentFromReader(pageMarkup)
+func fetchAllJobsURL(pageMarkup *http.Response) (jobsURL []string) {
+	doc, err := gq.NewDocumentFromResponse(pageMarkup)
 
 	if err != nil {
 		loggerInstance.Println(err.Error())
 		return
 	}
 
-	doc.Find(".title").Each(func(_ int, s *gq.Selection) {
-		href, found := s.Find("a").Attr("href")
+	doc.Find(".title a").Each(func(_ int, s *gq.Selection) {
+		href, found := s.Attr("href")
 
 		if !found {
-			loggerInstance.Println("No HREF found for job")
+			loggerInstance.Println("No HREF found for job : ")
 			return
 		}
 
@@ -94,16 +127,23 @@ func fetchAllJobsURL(pageMarkup io.ReadCloser) (jobsURL []string) {
 	return
 }
 
-func getJobsFromJobsURL(jobsURL []string) (jobsList []jobType.Job) {
+func getJobsFromJobsURL(jobsURL []string) (jobsList [](*jobType.Job)) {
 
 	var wg sync.WaitGroup
 
 	wg.Add(len(jobsURL))
 
+	var ml sync.Mutex
+
+	jobsList = [](*jobType.Job){}
+
 	for _, jobURL := range jobsURL {
 
 		go func(jobURL string) {
+
 			defer wg.Done()
+
+			time.Sleep(time.Duration(rand.Intn(900)) * time.Second)
 
 			newJob, ok := parseSingleJobPage(jobURL)
 
@@ -111,7 +151,11 @@ func getJobsFromJobsURL(jobsURL []string) (jobsList []jobType.Job) {
 				return
 			}
 
-			jobsList = append(jobsList, *newJob)
+			ml.Lock()
+
+			jobsList = append(jobsList, newJob)
+
+			ml.Unlock()
 
 		}(jobURL)
 	}
@@ -123,23 +167,14 @@ func getJobsFromJobsURL(jobsURL []string) (jobsList []jobType.Job) {
 
 func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 
-	newRequestInstance, newRequestInstanceError := http.NewRequest("GET", jobURL, nil)
-
-	if newRequestInstanceError != nil {
-		loggerInstance.Println(newRequestInstanceError.Error())
-		return
-	}
-
-	newRequestInstance.Host = "angel.co"
-	newRequestInstance.Header.Add("Accept", "*/*")
-	newRequestInstance.Header.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36")
-
-	response, fetchErr := httpClient.Do(newRequestInstance)
+	response, fetchErr := makeRequestToAngelListServer("GET", jobURL, "", nil, true)
 
 	if fetchErr != nil {
 		loggerInstance.Println(fetchErr.Error())
 		return
 	}
+
+	defer response.Body.Close()
 
 	doc, err := gq.NewDocumentFromReader(response.Body)
 
@@ -148,98 +183,84 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 		return
 	}
 
-	newJob = &jobType.Job{}
-
-	newJob.Description = doc.Find(".job-description").Text()
-	newJob.Published_Date = uint64(time.Now().Unix() * 1000)
-	newJob.Channel_Name = channelName
-
-	doc.Find(".job-listing-metadata").Children().EachWithBreak(func(index int, s *gq.Selection) bool {
-
-		if index == 1 {
-			newJob.Tags = strings.Join(strings.Split(s.Text(), ","), " # ")
-			return false
-		}
-
-		return true
-	})
-
-	newJob.Source = jobURL
-	newJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description)
-	newJob.Source_Name = "al"
+	newJob = job.NewJob()
 
 	titleAndCompany := strings.Split(doc.Find(".company-summary").Find("h1").First().Text(), "at")
 
 	if len(titleAndCompany) > 0 {
-		newJob.Title = strings.Trim(titleAndCompany[0], "")
+		newJob.Title = strings.TrimSpace(titleAndCompany[0])
 	}
 
-	if len(titleAndCompany) > 1 {
-		newJob.Company = strings.Trim(titleAndCompany[1], "")
+	if filters.IsValidJob(newJob.Title) {
+
+		if len(titleAndCompany) > 1 {
+			newJob.Company = strings.TrimSpace(titleAndCompany[1])
+		}
+
+		locationAndJobType := strings.Split(doc.Find(".company-summary").Find("div").First().Text(), "·")
+
+		if len(locationAndJobType) > 0 {
+			newJob.Address = strings.TrimSpace(locationAndJobType[0])
+		}
+
+		if len(locationAndJobType) > 1 {
+			newJob.Job_Type = strings.TrimSpace(locationAndJobType[1])
+		}
+
+		newJob.Description = doc.Find(".job-description").Text()
+		newJob.Published_Date = uint64(time.Now().Unix() * 1000)
+		newJob.Channel_Name = channelName
+
+		doc.Find(".job-listing-metadata").Children().EachWithBreak(func(index int, s *gq.Selection) bool {
+
+			if index == 1 {
+				newJob.Tags = strings.Join(strings.Split(s.Text(), ","), " # ")
+				return false
+			}
+
+			return true
+		})
+
+		newJob.Source = jobURL
+		newJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description)
+		newJob.Source_Name = "al"
+
+		if newJob.Address != "" {
+			locationMap := make(map[string]string)
+			geoUtils.GetLocationFromPlaceName(newJob.Address, locationMap)
+			newJob.City = locationMap["locality"]
+			newJob.Country = locationMap["country"]
+		}
+
+		ok = true
+	} else {
+		loggerInstance.Println("Rejecting Job : ", newJob.Title)
 	}
-
-	locationAndJobType := strings.Split(doc.Find(".company-summary").Find("div").First().Text(), "·")
-
-	if len(locationAndJobType) > 0 {
-		newJob.Address = strings.Trim(locationAndJobType[0], "")
-	}
-
-	if len(locationAndJobType) > 1 {
-		newJob.Job_Type = strings.Trim(locationAndJobType[1], "")
-	}
-
-	if newJob.Address != "" {
-		locationMap := make(map[string]string)
-		geoUtils.GetLocationFromPlaceName(newJob.Address, locationMap)
-		newJob.City = locationMap["locality"]
-		newJob.Country = locationMap["country"]
-	}
-
-	ok = true
-
-	loggerInstance.Println(newJob)
 
 	return
 }
 
-func findJobIdsList() (idsList []int) {
+func findJobIdsList(searchWordsList []string) (idsList []int) {
 
-	pageResponse, fetchErr := httpClient.Get("https://angel.co/jobs#find/f!%7B%22keywords%22%3A%5B%22junior%22%5D%7D")
+	var ifJobsIDFound bool
 
-	if fetchErr != nil {
-		loggerInstance.Println(fetchErr.Error())
-		return
+	idsList, ifJobsIDFound = getJobsPage(searchWordsList)
+
+	if !ifJobsIDFound {
+		idsList = []int{}
 	}
-
-	doc, err := gq.NewDocumentFromReader(pageResponse.Body)
-
-	if err != nil {
-		loggerInstance.Println(err.Error())
-		return
-	}
-
-	idsListString, ok := doc.Find(".startup-container").Attr("data-startup_ids")
-
-	if !ok {
-		loggerInstance.Println("Unable To find the ID's Node")
-		return
-	}
-
-	parseError := json.Unmarshal([]byte(idsListString), &idsList)
-
-	if parseError != nil {
-		loggerInstance.Println(parseError.Error())
-		return
-	}
+	//else {
+	//	loggerInstance.Println(len(idsList))
+	//	if len(idsList) > 20 {
+	//		idsList = idsList[:20]
+	//	}
+	//}
 
 	return
 }
 
 func init() {
+	batchSize = 20
 	channelName = "angellist"
 	loggerInstance = logger.Logger
-
-	httpClient = &http.Client{
-		Timeout: time.Second * 300,
-	}
 }

@@ -30,8 +30,8 @@ func getAllJobs(response http.ResponseWriter, request *http.Request) (errMsg str
 			return
 		}
 
-		resultList := jobModel.FindContent(query)
-		finalResult := jobType.ConvertToResponse(resultList)
+		resultList, numberOfAvailableRecords := jobModel.FindContent(query)
+		finalResult := jobType.ConvertToResponse(resultList, numberOfAvailableRecords)
 		responseData, marshallingErr := json.Marshal(finalResult)
 
 		if marshallingErr != nil {

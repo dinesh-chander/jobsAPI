@@ -11,30 +11,12 @@ import (
 	"strings"
 	"time"
 	jobType "types/jobs"
-	"types/location"
+	"types/scrapers/whoishiring"
 	cronParse "utils/cronParser"
 	"utils/filters"
-	"utils/geoUtils"
-	miscellaneousUtils "utils/miscellaneous"
 
 	"github.com/tidwall/gjson"
 )
-
-type whoIsHiringJobStruct struct {
-	Apply       string
-	Address     string
-	Company     string
-	Description string
-	Kind        string
-	Location    location.Location
-	Url         string
-	Title       string
-	Source      string
-	Source_name string
-	Remote      bool
-	Time        uint64
-	Tags        []string
-}
 
 var channelName string
 var loggerInstance *log.Logger
@@ -63,9 +45,10 @@ func GetWhoIsHiringJobs(jobsStream chan *jobType.Job, scheduleAt string, fetchFr
 	}
 }
 
-func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64, searchWordsList []string) (jobsList [](*whoIsHiringJobStruct)) {
+func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64, searchWordsList []string) (jobsList [](*whoishiring.WhoIsHiringType)) {
+
 	httpClient := &http.Client{
-		Timeout: time.Second * 300,
+		Timeout: time.Duration(300) * time.Second,
 	}
 
 	var searchQuery string
@@ -86,8 +69,6 @@ func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64, searchWordsLi
 
 	postData := `{"query":{"bool":{"must":[],"should":[` + searchQuery + `],"must_not":[],"filter":{"bool":{"must":[{"geo_bounding_box":{"location":{"bottom_left":{"lat":-70.8676081294354,"lon":86.70474999999999},"top_right":{"lat":83.82242395874371,"lon":-90.48275000000001}}}},{"range":{"time":{"gt":` + strconv.FormatInt(lastFetchedJobTimeInMilliSeconds, 10) + `}}}],"should":[],"must_not":[]}}}},"sort":[{"time":{"order":"desc","mode":"min"}}],"size":20000}`
 
-	loggerInstance.Println(postData)
-
 	postDataReader := strings.NewReader(postData)
 
 	response, err := httpClient.Post("https://search.whoishiring.io/item/item/_search?scroll=10m", "application/x-www-form-urlencoded", postDataReader)
@@ -103,7 +84,7 @@ func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64, searchWordsLi
 
 			hits := gjson.GetBytes(responseBody, "hits.hits")
 
-			jobsList = [](*whoIsHiringJobStruct){}
+			jobsList = [](*whoishiring.WhoIsHiringType){}
 
 			hits.ForEach(func(key, value gjson.Result) bool {
 
@@ -111,7 +92,7 @@ func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64, searchWordsLi
 
 					if value.Get("_source").String() != "" {
 
-						var jobDetails whoIsHiringJobStruct
+						var jobDetails whoishiring.WhoIsHiringType
 						jobJSON := []byte(value.Get("_source").String())
 
 						if len(jobJSON) > 0 {
@@ -130,31 +111,6 @@ func makeRequestForNewJobs(lastFetchedJobTimeInMilliSeconds int64, searchWordsLi
 			})
 		}
 	}
-
-	return
-}
-
-func convertToStandardJobStruct(newJob *whoIsHiringJobStruct) (singleJob *jobType.Job) {
-	singleJob = job.NewJob()
-
-	singleJob.Company = newJob.Company
-	singleJob.Description = newJob.Description
-	singleJob.Address = newJob.Address
-	singleJob.Is_Remote = newJob.Remote
-	singleJob.Published_Date = newJob.Time
-	singleJob.Title = newJob.Title
-	singleJob.Job_Type = newJob.Kind
-	singleJob.Source = newJob.Source
-	singleJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description)
-	singleJob.Source_Name = newJob.Source_name
-
-	singleJob.Channel_Name = channelName
-	singleJob.Tags = strings.Join(newJob.Tags, " # ")
-
-	locationMap := make(map[string]string)
-	geoUtils.GetLocationFromCoordinates(newJob.Location.Lat, newJob.Location.Lon, locationMap)
-	singleJob.City = locationMap["locality"]
-	singleJob.Country = locationMap["country"]
 
 	return
 }

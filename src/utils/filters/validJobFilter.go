@@ -6,11 +6,17 @@ import (
 )
 
 var searchWordsList []string
+var filterWordsList []string
 
-func IsValidJob(value string) bool {
+func isWordPresent(value string, wordsList []string) bool {
 
-	for _, searchWord := range searchWordsList {
-		if strings.Contains(strings.ToUpper(value), searchWord) {
+	if len(wordsList) == 0 {
+		return true
+	}
+
+	for _, word := range wordsList {
+
+		if strings.Contains(strings.ToUpper(value), word) {
 			return true
 		}
 	}
@@ -18,10 +24,24 @@ func IsValidJob(value string) bool {
 	return false
 }
 
-func init() {
-	searchWordsList = strings.Split(config.GetConfig("validWords"), ",")
+func IsValidJob(value string) bool {
+	return isWordPresent(value, searchWordsList) && isWordPresent(value, filterWordsList)
+}
 
-	for index, searchWord := range searchWordsList {
-		searchWordsList[index] = strings.ToUpper(searchWord)
+func init() {
+
+	filterWordsList = strings.Split(config.GetConfig("filterWords"), ",")
+
+	searchWordsList = strings.Split(config.GetConfig("searchWords"), ",")
+
+	convertListToUpperCase(searchWordsList)
+
+	convertListToUpperCase(filterWordsList)
+}
+
+func convertListToUpperCase(wordsList []string) {
+
+	for index, word := range wordsList {
+		wordsList[index] = strings.ToUpper(word)
 	}
 }

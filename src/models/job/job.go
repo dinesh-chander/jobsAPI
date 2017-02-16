@@ -7,8 +7,6 @@ import (
 	"logger"
 	"os"
 	"path"
-	"strconv"
-	"time"
 	jobType "types/jobs"
 
 	"github.com/jinzhu/gorm"
@@ -66,15 +64,16 @@ func init() {
 	db, databaseCreationErr = gorm.Open("sqlite3", getDbPath())
 
 	if config.GetConfig("dbQueryLog") == "true" {
+
 		db.LogMode(true)
 		db.SetLogger(loggerInstance)
-
 	} else {
 		db.LogMode(false)
 	}
 
+	db.DB().SetMaxOpenConns(5)
+
 	db.Exec(`
-        PRAGMA automatic_index = true;
         PRAGMA synchronous = false;
 	    PRAGMA cache_size = 32768;
         PRAGMA cache_spill = false;
@@ -95,6 +94,12 @@ func init() {
 		loggerInstance.Fatalln(tableCreationErr.Error())
 	}
 
+	indexCreationErr := db.Table(tableName).AddUniqueIndex("idx_source_id", "source_id").Error
+
+	if indexCreationErr != nil {
+		loggerInstance.Fatalln(indexCreationErr.Error())
+	}
+
 	createSearchTable()
 	go removeOlderEntries()
 }
@@ -106,58 +111,11 @@ func createSearchTable() {
 		loggerInstance.Fatalln(err.Error())
 	}
 
-	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts5(ID, Title, Description, Location, tokenize = 'porter unicode61 remove_diacritics 1')", searchTableName)).Error
+	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts4(ID, Title, Description, Location, matchinfo=fts3, tokenize=porter 'remove_diacritics=1', notindexed=ID)", searchTableName)).Error
 
 	if tableCreationErr != nil {
 		loggerInstance.Fatalln(tableCreationErr.Error())
 	}
 
 	go migrateJobRowsToSearchableContent()
-}
-
-func migrateJobRowsToSearchableContent() {
-	loggerInstance.Println("Migrating old data to searchable_content table")
-
-	var indexEntriesOfLastXDays uint64
-
-	if config.GetConfig("indexEntriesOfLastXDays") != "" {
-		var err error
-
-		indexEntriesOfLastXDays, err = strconv.ParseUint(config.GetConfig("indexEntriesOfLastXDays"), 10, 64)
-
-		if err != nil {
-			loggerInstance.Panicln("invalid value for 'indexEntriesOfLastXDays' in config. Value is :", config.GetConfig("indexEntriesOfLastXDays"))
-		}
-	} else {
-		indexEntriesOfLastXDays = 0 // index everything
-	}
-
-	loggerInstance.Println("Indexing Entries for last :", indexEntriesOfLastXDays, "Days")
-
-	if indexEntriesOfLastXDays != 0 {
-		indexEntriesOfLastXDays = (uint64(time.Now().Unix()) - (indexEntriesOfLastXDays * 24 * 3600)) * 1000
-	}
-
-	jobsList := GetAll()
-
-	tx := db.Begin()
-	defer tx.Commit()
-
-	var newSearchableContent *jobType.SearchableContent
-	var insertErr error
-
-	for _, job := range jobsList {
-		if indexEntriesOfLastXDays != 0 {
-			if job.Published_Date > indexEntriesOfLastXDays {
-				newSearchableContent = addSearchableContent(&job)
-				insertErr = tx.Table(searchTableName).Create(newSearchableContent).Error
-
-				if insertErr != nil {
-					loggerInstance.Println(insertErr.Error())
-				}
-			}
-		}
-	}
-
-	loggerInstance.Println("Migration Complete")
 }

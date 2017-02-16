@@ -17,7 +17,7 @@ type Job struct {
 	Is_Remote      bool
 	Source         string
 	Source_Name    string
-	Source_Id      string `gorm:"unique_index"`
+	Source_Id      string
 	Tags           string
 	Approved       bool
 }

@@ -5,6 +5,7 @@ import (
 	"config"
 	"log"
 	"logger"
+	_ "models"
 	"models/job"
 	"scrapers"
 	"strconv"
@@ -43,8 +44,12 @@ func updateNewJobs(jobsStream chan *jobTypes.Job) {
 	for {
 		select {
 		case newJob := <-jobsStream:
-			loggerInstance.Println("new job added")
-			go job.AddJob(newJob)
+
+			if newJob != nil {
+				loggerInstance.Println("new job added")
+				job.AddJob(newJob)
+			}
+
 		}
 	}
 }
@@ -58,7 +63,7 @@ func scheduleScrappers(jobsStream chan *jobTypes.Job) {
 
 	fetchFrom = (time.Now().Unix() * 1000) - (fetchFrom * 24 * 3600000)
 
-	searchWordsList := strings.Split(config.GetConfig("validWords"), ",")
+	searchWordsList := strings.Split(config.GetConfig("searchWords"), ",")
 
 	scrapers.InitiallizeScrappers(jobsStream, fetchFrom, searchWordsList)
 }

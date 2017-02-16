@@ -1,18 +1,23 @@
 package jobs
 
 type APIResponse struct {
-	Title       string
-	City        string
-	Country     string
-	Apply       string
-	Company     string
-	Type        string
-	Description string
+	Title   string
+	City    string
+	Country string
+	Apply   string
+	Company string
+	Type    string
+	//	Description string
 	PublishedOn uint64
 }
 
-func ConvertToResponse(jobsList []Job) (response []APIResponse) {
-	response = make([]APIResponse, len(jobsList))
+type APIResponseList struct {
+	Count int           `json:count`
+	Data  []APIResponse `json:data`
+}
+
+func ConvertToResponse(jobsList []Job, resultCount int) (response *APIResponseList) {
+	responseList := make([]APIResponse, len(jobsList))
 	responseIndex := 0
 
 	for _, newJob := range jobsList {
@@ -24,12 +29,16 @@ func ConvertToResponse(jobsList []Job) (response []APIResponse) {
 		newResponseItem.City = newJob.City
 		newResponseItem.Company = newJob.Company
 		newResponseItem.Type = newJob.Job_Type
-		newResponseItem.Description = newJob.Description
 		newResponseItem.PublishedOn = newJob.Published_Date
 
-		response[responseIndex] = newResponseItem
+		responseList[responseIndex] = newResponseItem
 		responseIndex = responseIndex + 1
 	}
 
-	return response
+	response = &APIResponseList{
+		Data:  responseList,
+		Count: resultCount,
+	}
+
+	return
 }
