@@ -12,8 +12,8 @@ type APIResponse struct {
 }
 
 type APIResponseList struct {
-	Count int           `json:count`
-	Data  []APIResponse `json:data`
+	Count int
+	Data  []APIResponse
 }
 
 func ConvertToResponse(jobsList []Job, resultCount int) (response *APIResponseList) {

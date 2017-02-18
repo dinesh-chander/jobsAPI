@@ -18,6 +18,8 @@ func getJobsPage(searchWordsList []string) (startupIDList []int, jobsIDList [][]
 
 		loggedInCookieString, loginSuccessful := sendLoginRequest(angelistCookie, csrfToken)
 
+		loggerInstance.Println("Login To AngelList Successful")
+
 		if loginSuccessful {
 			startupIDList, jobsIDList, ifJobsIDFound = searchJobsForKeywords(searchWordsList, loggedInCookieString)
 		}

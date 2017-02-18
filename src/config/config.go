@@ -18,7 +18,13 @@ func init() {
 
 	if config["mode"] == "development" {
 
-		config["whoishiring"] = "0 0 0 1-31/1 * * *"
+		config["db_name"] = "jobs"
+		config["db_user"] = "root"
+		config["db_password"] = ""
+		config["db_host"] = "127.0.0.1"
+		config["db_port"] = "3306"
+
+		config["whoishiring"] = "0 0 0-23/12 * * * *"
 
 		config["angellist"] = "0 0 0 * * 0 *"
 
@@ -26,8 +32,6 @@ func init() {
 		config["port"] = "9080"
 		config["gzip"] = "true"
 		config["jobManagersCount"] = "3"
-
-		config["tableNamePrefix"] = "dev_"
 
 		config["fetchFrom"] = "30" // default 0 means fetch today's data
 
@@ -48,20 +52,24 @@ func init() {
 
 	} else if config["mode"] == "production" {
 
-		config["whoishiring"] = "0-23/12 * * * *"
+		config["db_name"] = "jobs"
+		config["db_user"] = "root"
+		config["db_password"] = "mysql"
+		config["db_host"] = "localhost"
+		config["db_port"] = "3306"
 
-		config["angellist"] = "0 0 0 * * 0-6/3 *"
+		config["whoishiring"] = "0 0 0 * * 0-6/1 *"
+
+		config["angellist"] = "0 0 0 * * 0-6/5 *"
 
 		config["interface"] = "localhost"
 		config["port"] = "8080"
 		config["gzip"] = "true"
-		config["jobManagersCount"] = "3"
-
-		config["tableNamePrefix"] = ""
+		config["jobManagersCount"] = "5"
 
 		config["fetchFrom"] = "120" // default 0 means fetch today's data
 
-		config["indexEntriesOfLastXDays"] = "90" // default 0 means index all
+		config["indexEntriesOfLastXDays"] = "120" // default 0 means index all
 
 		config["dbDir"] = "db"
 		config["dbQueryLog"] = "false"

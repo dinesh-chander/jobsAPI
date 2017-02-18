@@ -2,120 +2,105 @@ package job
 
 import (
 	"config"
-	"fmt"
 	"log"
 	"logger"
-	"os"
-	"path"
 	jobType "types/jobs"
 
 	"github.com/jinzhu/gorm"
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
 var loggerInstance *log.Logger
 var db *gorm.DB
+var databaseName string
 var tableName string
-var searchTableName string
 
 func NewJob() *jobType.Job {
 	return &jobType.Job{}
 }
 
-func getDbPath() (dbPath string) {
-	var logsDirectory string
+func getDbPath(dbName string) (dbPath string) {
 
-	ex, wrongVersionErr := os.Executable()
+	dbUser := config.GetConfig("db_user")
+	dbPassword := config.GetConfig("db_password")
 
-	if wrongVersionErr != nil {
-		panic(wrongVersionErr.Error())
-	}
+	dbHost := config.GetConfig("db_host")
+	dbPort := config.GetConfig("db_port")
 
-	exPath := path.Dir(ex)
+	connectionURI := dbUser + ":" + dbPassword + "@" + "tcp(" + dbHost + ":" + dbPort + ")/" + dbName + "?charset=utf8&parseTime=True&loc=Local"
 
-	logsDirectory = path.Join(path.Dir(exPath), config.GetConfig("dbDir"))
-
-	_, dirErr := os.Stat(logsDirectory)
-
-	if dirErr != nil {
-		if os.IsNotExist(dirErr) {
-
-			mkdirErr := os.Mkdir(logsDirectory, 0700)
-
-			if mkdirErr != nil {
-				panic(mkdirErr.Error())
-			}
-		} else {
-			panic(dirErr.Error())
-		}
-	}
-
-	return path.Join(logsDirectory, "job.db")
+	return connectionURI
 }
 
-func init() {
-	var databaseCreationErr error
-	var tableCreationErr error
+func createDatabase() {
 
-	tableName = config.GetConfig("tableNamePrefix") + "jobs"
-	searchTableName = config.GetConfig("tableNamePrefix") + "searchable_content"
-	loggerInstance = logger.Logger
+	databaseName = config.GetConfig("mode") + "_" + config.GetConfig("db_name")
 
-	db, databaseCreationErr = gorm.Open("sqlite3", getDbPath())
-
-	if config.GetConfig("dbQueryLog") == "true" {
-
-		db.LogMode(true)
-		db.SetLogger(loggerInstance)
-	} else {
-		db.LogMode(false)
-	}
-
-	db.DB().SetMaxOpenConns(5)
-
-	db.Exec(`
-        PRAGMA synchronous = false;
-	    PRAGMA cache_size = 32768;
-        PRAGMA cache_spill = false;
-	    PRAGMA read_uncommitted = true;
-	    PRAGMA parser_trace = false;
-	    PRAGMA journal_mode = MEMORY;
-	    PRAGMA foreign_keys = false;`)
-
-	db.SingularTable(true)
+	databaseCreationErr := db.Exec("CREATE DATABASE IF NOT EXISTS " + databaseName).Error
 
 	if databaseCreationErr != nil {
 		loggerInstance.Fatalln(databaseCreationErr.Error())
 	}
+}
+
+func createDatabaseTables() {
+	var tableCreationErr error
 
 	tableCreationErr = db.Table(tableName).AutoMigrate(&jobType.Job{}).Error
 
 	if tableCreationErr != nil {
 		loggerInstance.Fatalln(tableCreationErr.Error())
 	}
+}
 
+func createDatabaseTableIndexes() {
 	indexCreationErr := db.Table(tableName).RemoveIndex("idx_source_id").AddUniqueIndex("idx_source_id", "source_id").Error
 
 	if indexCreationErr != nil {
 		loggerInstance.Fatalln(indexCreationErr.Error())
 	}
-
-	createSearchTable()
-	go removeOlderEntries()
 }
 
-func createSearchTable() {
-	err := db.DropTableIfExists(searchTableName).Error
+func setConnectionConfiguration() {
 
-	if err != nil {
-		loggerInstance.Fatalln(err.Error())
+	if config.GetConfig("dbQueryLog") == "true" {
+		db.LogMode(true)
+		db.SetLogger(loggerInstance)
+	} else {
+		db.LogMode(false)
 	}
 
-	tableCreationErr := db.Exec(fmt.Sprintf("CREATE VIRTUAL TABLE IF NOT EXISTS %s USING fts4(ID, Title, Description, Location, matchinfo=fts3, tokenize=porter 'remove_diacritics=1', notindexed=ID)", searchTableName)).Error
+	db.SingularTable(true)
+	db.DB().SetMaxOpenConns(5)
+}
 
-	if tableCreationErr != nil {
-		loggerInstance.Fatalln(tableCreationErr.Error())
+func init() {
+
+	var connectionErr error
+
+	tableName = config.GetConfig("mode") + "_" + "jobs"
+
+	loggerInstance = logger.Logger
+
+	db, connectionErr = gorm.Open("mysql", getDbPath(databaseName))
+
+	if connectionErr != nil {
+		loggerInstance.Fatalln(connectionErr.Error())
 	}
 
-	go migrateJobRowsToSearchableContent()
+	createDatabase()
+
+	db.Close()
+
+	db, connectionErr = gorm.Open("mysql", getDbPath(databaseName))
+
+	if connectionErr != nil {
+		loggerInstance.Fatalln(connectionErr.Error())
+	}
+
+	setConnectionConfiguration()
+
+	createDatabaseTables()
+
+	createDatabaseTableIndexes()
 }

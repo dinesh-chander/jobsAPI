@@ -25,7 +25,7 @@ func GetWhoIsHiringJobs(jobsStream chan *jobType.Job, scheduleAt string, fetchFr
 
 	expr := cronParse.Parse(scheduleAt)
 
-	timestampOfLastEntryInDB := job.FindLastAddedEntryTimestampForSource(channelName)
+	timestampOfLastEntryInDB := job.FindLastAddedEntryTimestampForChannel(channelName)
 
 	if timestampOfLastEntryInDB > fetchFrom {
 		fetchFrom = timestampOfLastEntryInDB
@@ -41,7 +41,7 @@ func GetWhoIsHiringJobs(jobsStream chan *jobType.Job, scheduleAt string, fetchFr
 
 		nextTime := expr.Next(time.Now())
 		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
-		fetchFrom = job.FindLastAddedEntryTimestampForSource(channelName)
+		fetchFrom = job.FindLastAddedEntryTimestampForChannel(channelName)
 	}
 }
 

@@ -25,11 +25,12 @@ func FindContent(searchQuery *jobType.Query) (searchResult []jobType.Job, number
 
 func buildSearchString(searchQuery *jobType.Query) (searchString string) {
 
-	queryStringList := [3]string{}
+	queryStringList := [4]string{}
 
 	queryStringList[0] = formatSearchQuery(searchQuery.Locations, "Location")
 	queryStringList[1] = formatSearchQuery(searchQuery.Titles, "Title")
 	queryStringList[2] = formatSearchQuery(searchQuery.Keywords, "Description")
+	queryStringList[3] = fmt.Sprintf(`SELECT DISTINCT(id) from "%s" WHERE approved = 1`, tableName)
 
 	for _, value := range queryStringList {
 
@@ -59,7 +60,7 @@ func formatSearchQuery(searchStringsList []string, propertyName string) (searchS
 
 	if len(searchStringsList) != 0 {
 		searchSQLString = strings.Join(searchStringsList, "")
-		searchSQLString = fmt.Sprintf(`SELECT DISTINCT(id) from "%s" WHERE "%s" MATCH '%s'`, searchTableName, propertyName, searchSQLString)
+		searchSQLString = fmt.Sprintf(`SELECT DISTINCT(id) from "%s" WHERE "%s" MATCH '%s'`, tableName, propertyName, searchSQLString)
 	}
 
 	return

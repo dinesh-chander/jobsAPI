@@ -13,7 +13,6 @@ import (
 	miscellaneousUtils "utils/miscellaneous"
 
 	gq "github.com/PuerkitoBio/goquery"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"utils/filters"
@@ -29,15 +28,17 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 
 	jobsURLChannel := make(chan string, 500)
 
-	for workerIndex := 0; workerIndex < batchSize; workerIndex = workerIndex + 1 {
+	loggerInstance.Println("Starting", int(batchSize/2), "Angelist Job Fetchers")
 
-		go func() {
+	for workerIndex := 0; workerIndex < int(batchSize/2); workerIndex = workerIndex + 1 {
+
+		go func(workerId int) {
 
 			for {
 				select {
 				case newURLForProcessing := <-jobsURLChannel:
 
-					loggerInstance.Println("Processing new job")
+					loggerInstance.Println("New Job Processing Task Fetched By :", workerId)
 
 					newJob, ok := parseSingleJobPage(newURLForProcessing)
 
@@ -47,7 +48,7 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 
 				}
 			}
-		}()
+		}(workerIndex)
 	}
 
 	for {
@@ -64,8 +65,6 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 }
 
 func fetchGroupedJobsListPage(pageParams string, jobsURLChannel chan string) {
-
-	time.Sleep(time.Duration(rand.Intn(1800)) * time.Second)
 
 	angelListURL := `https://angel.co/job_listings/browse_startups_table?`
 
@@ -196,8 +195,8 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 		if newJob.Address != "" {
 			locationMap := make(map[string]string)
 			geoUtils.GetLocationFromPlaceName(newJob.Address, locationMap)
-			newJob.City = locationMap["locality"]
-			newJob.Country = locationMap["country"]
+			newJob.City = strings.TrimSpace(locationMap["locality"])
+			newJob.Country = strings.TrimSpace(locationMap["country"])
 		}
 
 		ok = true
@@ -217,6 +216,9 @@ func findJobIdsList(searchWordsList []string) (startupIDList []int, jobsIDList [
 	if !ifJobsIDFound {
 		startupIDList = []int{}
 		jobsIDList = [][]int{}
+	} else {
+		startupIDList = startupIDList[:10]
+		jobsIDList = jobsIDList[:10]
 	}
 
 	return
