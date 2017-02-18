@@ -51,10 +51,9 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 		}(workerIndex)
 	}
 
+	loggerInstance.Println("AngelList Scraper Started")
+
 	for {
-
-		loggerInstance.Println("AngelList Loop Starts")
-
 		startupIDList, jobsIDList := findJobIdsList(searchWordsList)
 
 		fetchJobsURL(startupIDList, jobsIDList, jobsURLChannel)
@@ -217,8 +216,8 @@ func findJobIdsList(searchWordsList []string) (startupIDList []int, jobsIDList [
 		startupIDList = []int{}
 		jobsIDList = [][]int{}
 	} else {
-		startupIDList = startupIDList[:10]
-		jobsIDList = jobsIDList[:10]
+		startupIDList = startupIDList[:25]
+		jobsIDList = jobsIDList[:25]
 	}
 
 	return

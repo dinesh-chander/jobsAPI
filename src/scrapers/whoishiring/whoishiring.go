@@ -31,6 +31,8 @@ func GetWhoIsHiringJobs(jobsStream chan *jobType.Job, scheduleAt string, fetchFr
 		fetchFrom = timestampOfLastEntryInDB
 	}
 
+	loggerInstance.Println("WhoIsHiring Scraper Started")
+
 	for {
 
 		jobsList := makeRequestForNewJobs(fetchFrom, searchWordsList)
