@@ -26,11 +26,11 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 
 	expr := cronParse.Parse(scheduleAt)
 
-	jobsURLChannel := make(chan string, 500)
+	jobsURLChannel := make(chan string, 2000)
 
 	loggerInstance.Println("Starting", int(batchSize/2), "Angelist Job Fetchers")
 
-	for workerIndex := 0; workerIndex < int(batchSize/2); workerIndex = workerIndex + 1 {
+	for workerIndex := 0; workerIndex < 1; workerIndex = workerIndex + 1 {
 
 		go func(workerId int) {
 
@@ -46,6 +46,7 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 						jobsStream <- newJob
 					}
 
+					time.Sleep(time.Second * 15)
 				}
 			}
 		}(workerIndex)
@@ -186,6 +187,8 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 				newJob.Tags = strings.Join(strings.Split(doc.Find(".job-listing-metadata").Children().Eq(1).Text(), ","), " # ")
 			}
 		}
+
+		newJob.Apply = jobURL
 
 		newJob.Source = jobURL
 		newJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description)
