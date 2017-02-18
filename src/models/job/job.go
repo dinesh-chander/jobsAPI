@@ -94,7 +94,7 @@ func init() {
 		loggerInstance.Fatalln(tableCreationErr.Error())
 	}
 
-	indexCreationErr := db.Table(tableName).AddUniqueIndex("idx_source_id", "source_id").Error
+	indexCreationErr := db.Table(tableName).RemoveIndex("idx_source_id").AddUniqueIndex("idx_source_id", "source_id").Error
 
 	if indexCreationErr != nil {
 		loggerInstance.Fatalln(indexCreationErr.Error())

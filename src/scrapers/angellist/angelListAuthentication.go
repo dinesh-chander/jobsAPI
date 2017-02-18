@@ -10,20 +10,16 @@ import (
 	"strconv"
 )
 
-func getJobsPage(searchWordsList []string) (jobsIDList []int, ifJobsIDFound bool) {
+func getJobsPage(searchWordsList []string) (startupIDList []int, jobsIDList [][]int, ifJobsIDFound bool) {
 
 	angelistCookie, csrfToken, isLoginPageFetched := fetchLoginPage()
 
 	if isLoginPageFetched {
 
-		//time.Sleep(time.Duration(20) * time.Second)
-
 		loggedInCookieString, loginSuccessful := sendLoginRequest(angelistCookie, csrfToken)
 
-		//time.Sleep(time.Duration(5) * time.Second)
-
 		if loginSuccessful {
-			jobsIDList, ifJobsIDFound = setSearchKeywords(searchWordsList, loggedInCookieString)
+			startupIDList, jobsIDList, ifJobsIDFound = searchJobsForKeywords(searchWordsList, loggedInCookieString)
 		}
 	}
 
@@ -129,7 +125,7 @@ func getCSRFandCookie(pageResponse *http.Response) (angelistCookieString string,
 	return
 }
 
-func setSearchKeywords(searchWordsList []string, loggedInCookieString string) (jobsIDList []int, ifJobsIDFound bool) {
+func searchJobsForKeywords(searchWordsList []string, loggedInCookieString string) (startupIDList []int, jobsIDList [][]int, ifJobsIDFound bool) {
 
 	searchKeywordsURL := "https://angel.co/job_listings/startup_ids"
 
@@ -168,14 +164,23 @@ func setSearchKeywords(searchWordsList []string, loggedInCookieString string) (j
 		loggerInstance.Println(readErr.Error())
 	} else {
 
-		ids := gjson.GetBytes(bufferedJSON, "ids")
+		startupIDs := gjson.GetBytes(bufferedJSON, "ids")
 
-		unmarshalError := json.Unmarshal([]byte(ids.String()), &jobsIDList)
+		unmarshalError := json.Unmarshal([]byte(startupIDs.String()), &startupIDList)
 
 		if unmarshalError != nil {
 			loggerInstance.Println(unmarshalError.Error())
 		} else {
-			ifJobsIDFound = true
+
+			jobsIDs := gjson.GetBytes(bufferedJSON, "listing_ids")
+
+			unmarshalError = json.Unmarshal([]byte(jobsIDs.String()), &jobsIDList)
+
+			if unmarshalError != nil {
+				loggerInstance.Println(unmarshalError.Error())
+			} else {
+				ifJobsIDFound = true
+			}
 		}
 	}
 

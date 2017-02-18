@@ -14,7 +14,7 @@ func GetConfig(configProperty string) (value string) {
 func init() {
 	config = make(map[string]string)
 
-	config["mode"] = "production"
+	config["mode"] = "development"
 
 	if config["mode"] == "development" {
 
@@ -29,7 +29,7 @@ func init() {
 
 		config["tableNamePrefix"] = "dev_"
 
-		config["fetchFrom"] = "2" // default 0 means fetch today's data
+		config["fetchFrom"] = "30" // default 0 means fetch today's data
 
 		config["indexEntriesOfLastXDays"] = "30" // default 0 means index all
 
@@ -64,7 +64,7 @@ func init() {
 		config["indexEntriesOfLastXDays"] = "90" // default 0 means index all
 
 		config["dbDir"] = "db"
-		config["dbQueryLog"] = "true"
+		config["dbQueryLog"] = "false"
 		config["disableLog"] = "false"
 		config["logsDir"] = "logs"
 		config["logsFile"] = "logs.log"

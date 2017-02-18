@@ -2,15 +2,19 @@ package angellist
 
 import (
 	"errors"
+	"github.com/viki-org/dnscache"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 )
 
+var httpTransport *http.Transport
+
 func makeRequestToAngelListServer(method string, url string, requestQuery string, headers map[string]string, handleRedirect bool) (response *http.Response, callError error) {
 
 	httpClient := &http.Client{
-		Timeout: time.Duration(300) * time.Second,
+		Timeout: time.Duration(600) * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if !handleRedirect {
 				return errors.New("found redirect")
@@ -18,6 +22,7 @@ func makeRequestToAngelListServer(method string, url string, requestQuery string
 
 			return nil
 		},
+		Transport: httpTransport,
 	}
 
 	newRequestInstance, newRequestInstanceError := http.NewRequest(method, url, strings.NewReader(requestQuery))
@@ -28,6 +33,7 @@ func makeRequestToAngelListServer(method string, url string, requestQuery string
 		return
 	}
 
+	newRequestInstance.Close = true
 	newRequestInstance.Header.Add("DNT", "1")
 	newRequestInstance.Host = "angel.co"
 	newRequestInstance.Header.Add("Origin", "https://angel.co")
@@ -46,5 +52,19 @@ func makeRequestToAngelListServer(method string, url string, requestQuery string
 func setHeaders(request *http.Request, headers map[string]string) {
 	for headerName, headerValue := range headers {
 		request.Header.Add(headerName, headerValue)
+	}
+}
+
+func init() {
+
+	resolver := dnscache.New(time.Minute * 5)
+
+	httpTransport = &http.Transport{
+		MaxIdleConnsPerHost: 0,
+		Dial: func(network string, address string) (net.Conn, error) {
+			separator := strings.LastIndex(address, ":")
+			ip, _ := resolver.FetchOneString(address[:separator])
+			return net.Dial("tcp", ip+address[separator:])
+		},
 	}
 }

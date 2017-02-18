@@ -6,7 +6,6 @@ import (
 	"models/job"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	jobType "types/jobs"
 	cronParse "utils/cronParser"
@@ -16,6 +15,7 @@ import (
 	gq "github.com/PuerkitoBio/goquery"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"utils/filters"
 )
 
@@ -27,85 +27,93 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 
 	expr := cronParse.Parse(scheduleAt)
 
-	jobsURLChannel := make(chan []string, 300)
+	jobsURLChannel := make(chan string, 500)
 
-	go func() {
+	for workerIndex := 0; workerIndex < batchSize; workerIndex = workerIndex + 1 {
 
-		for {
-			select {
-			case newURLBatch := <-jobsURLChannel:
+		go func() {
 
-				jobsList := getJobsFromJobsURL(newURLBatch)
+			for {
+				select {
+				case newURLForProcessing := <-jobsURLChannel:
 
-				for _, newJobReference := range jobsList {
+					loggerInstance.Println("Processing new job")
 
-					if newJobReference != nil {
-						jobsStream <- newJobReference
+					newJob, ok := parseSingleJobPage(newURLForProcessing)
+
+					if ok {
+						jobsStream <- newJob
 					}
+
 				}
 			}
-		}
-	}()
+		}()
+	}
 
 	for {
 
-		jobsID := findJobIdsList(searchWordsList)
+		loggerInstance.Println("AngelList Loop Starts")
 
-		fetchJobsURL(jobsID, jobsURLChannel)
+		startupIDList, jobsIDList := findJobIdsList(searchWordsList)
+
+		fetchJobsURL(startupIDList, jobsIDList, jobsURLChannel)
 
 		nextTime := expr.Next(time.Now())
 		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
 	}
 }
 
-func fetchJobsURL(idsList []int, jobsURLChannel chan []string) {
-	var lastIndex int
-	var batchedIDs []int
+func fetchGroupedJobsListPage(pageParams string, jobsURLChannel chan string) {
+
+	time.Sleep(time.Duration(rand.Intn(1800)) * time.Second)
 
 	angelListURL := `https://angel.co/job_listings/browse_startups_table?`
 
-	for index := 0; index < len(idsList); index = index + batchSize {
+	response, fetchErr := makeRequestToAngelListServer("GET", (angelListURL + pageParams), "", nil, true)
 
-		var startupsIds string
+	if fetchErr != nil {
+		loggerInstance.Println(fetchErr.Error())
+	} else {
 
-		lastIndex = index + batchSize
-
-		if lastIndex >= len(idsList) {
-			lastIndex = len(idsList) - 1
-		}
-
-		batchedIDs = idsList[index:lastIndex]
-
-		for selectedIDsIndex, jobId := range batchedIDs {
-			if selectedIDsIndex == len(batchedIDs)-1 {
-				startupsIds = startupsIds + "startup_ids[]=" + strconv.Itoa(jobId)
-			} else {
-				startupsIds = startupsIds + "startup_ids[]=" + strconv.Itoa(jobId) + "&"
-			}
-		}
-
-		go func(pageParams string) {
-
-			response, fetchErr := makeRequestToAngelListServer("GET", (angelListURL + pageParams), "", nil, true)
-
-			if fetchErr != nil {
-				loggerInstance.Println(fetchErr.Error())
-				return
-			}
-
-			jobsURLList := fetchAllJobsURL(response)
-
-			response.Body.Close()
-
-			if jobsURLList != nil {
-				jobsURLChannel <- jobsURLList
-			}
-
-		}(startupsIds)
+		fetchAllJobsURL(response, jobsURLChannel)
+		response.Body.Close()
 	}
 }
 
-func fetchAllJobsURL(pageMarkup *http.Response) (jobsURL []string) {
+func fetchJobsURL(startupIDList []int, jobsIDList [][]int, jobsURLChannel chan string) {
+	var lastIndex int
+
+	var batchedStartupIDs []int
+	var batchedJobsIDList [][]int
+
+	for index := 0; index < len(startupIDList); index = index + batchSize {
+
+		lastIndex = index + batchSize
+
+		if lastIndex >= len(startupIDList) {
+			lastIndex = len(startupIDList) - 1
+		}
+
+		batchedStartupIDs = startupIDList[index:lastIndex]
+		batchedJobsIDList = jobsIDList[index:lastIndex]
+
+		urlParams := url.Values{}
+
+		for selectedStartUpIDsIndex, startupId := range batchedStartupIDs {
+			urlParams.Add("startup_ids[]", strconv.Itoa(startupId))
+
+			for _, listingId := range batchedJobsIDList[selectedStartUpIDsIndex] {
+				urlParams.Add("listing_ids["+strconv.Itoa(selectedStartUpIDsIndex)+"][]", strconv.Itoa(listingId))
+			}
+		}
+
+		finalUrl, _ := url.QueryUnescape(urlParams.Encode())
+
+		go fetchGroupedJobsListPage(finalUrl, jobsURLChannel)
+	}
+}
+
+func fetchAllJobsURL(pageMarkup *http.Response, jobsURLChannel chan string) {
 	doc, err := gq.NewDocumentFromResponse(pageMarkup)
 
 	if err != nil {
@@ -121,46 +129,10 @@ func fetchAllJobsURL(pageMarkup *http.Response) (jobsURL []string) {
 			return
 		}
 
-		jobsURL = append(jobsURL, href)
+		loggerInstance.Println("Adding New URL for processing")
+
+		jobsURLChannel <- href
 	})
-
-	return
-}
-
-func getJobsFromJobsURL(jobsURL []string) (jobsList [](*jobType.Job)) {
-
-	var wg sync.WaitGroup
-
-	wg.Add(len(jobsURL))
-
-	var ml sync.Mutex
-
-	jobsList = [](*jobType.Job){}
-
-	for _, jobURL := range jobsURL {
-
-		go func(jobURL string) {
-
-			defer wg.Done()
-
-			time.Sleep(time.Duration(rand.Intn(900)) * time.Second)
-
-			newJob, ok := parseSingleJobPage(jobURL)
-
-			if !ok {
-				return
-			}
-
-			ml.Lock()
-
-			jobsList = append(jobsList, newJob)
-
-			ml.Unlock()
-
-		}(jobURL)
-	}
-
-	wg.Wait()
 
 	return
 }
@@ -211,15 +183,11 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 		newJob.Published_Date = uint64(time.Now().Unix() * 1000)
 		newJob.Channel_Name = channelName
 
-		doc.Find(".job-listing-metadata").Children().EachWithBreak(func(index int, s *gq.Selection) bool {
-
-			if index == 1 {
-				newJob.Tags = strings.Join(strings.Split(s.Text(), ","), " # ")
-				return false
+		if strings.ToLower(doc.Find(".job-listing-metadata").Children().Eq(0).Text()) == "skills" {
+			if doc.Find(".job-listing-metadata").Children().Eq(1).Text() != "" {
+				newJob.Tags = strings.Join(strings.Split(doc.Find(".job-listing-metadata").Children().Eq(1).Text(), ","), " # ")
 			}
-
-			return true
-		})
+		}
 
 		newJob.Source = jobURL
 		newJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description)
@@ -240,27 +208,22 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 	return
 }
 
-func findJobIdsList(searchWordsList []string) (idsList []int) {
+func findJobIdsList(searchWordsList []string) (startupIDList []int, jobsIDList [][]int) {
 
 	var ifJobsIDFound bool
 
-	idsList, ifJobsIDFound = getJobsPage(searchWordsList)
+	startupIDList, jobsIDList, ifJobsIDFound = getJobsPage(searchWordsList)
 
 	if !ifJobsIDFound {
-		idsList = []int{}
+		startupIDList = []int{}
+		jobsIDList = [][]int{}
 	}
-	//else {
-	//	loggerInstance.Println(len(idsList))
-	//	if len(idsList) > 20 {
-	//		idsList = idsList[:20]
-	//	}
-	//}
 
 	return
 }
 
 func init() {
-	batchSize = 20
+	batchSize = 10
 	channelName = "angellist"
 	loggerInstance = logger.Logger
 }

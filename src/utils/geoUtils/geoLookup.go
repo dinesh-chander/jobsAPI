@@ -14,24 +14,27 @@ var googleMapsClient *maps.Client
 
 func GetLocationFromCoordinates(lat float64, lon float64, locationMap map[string]string) {
 
-	reverseGeoCodeRequest := &maps.GeocodingRequest{
-		LatLng: &maps.LatLng{
-			Lat: lat,
-			Lng: lon,
-		},
-	}
+	if lat != 0.0 && lon != 0.0 {
 
-	reverseGeoCodeResponse, requestErr := googleMapsClient.ReverseGeocode(context.Background(), reverseGeoCodeRequest)
+		reverseGeoCodeRequest := &maps.GeocodingRequest{
+			LatLng: &maps.LatLng{
+				Lat: lat,
+				Lng: lon,
+			},
+		}
 
-	if requestErr != nil {
-		loggerInstance.Println(requestErr.Error())
-	} else {
+		reverseGeoCodeResponse, requestErr := googleMapsClient.ReverseGeocode(context.Background(), reverseGeoCodeRequest)
 
-		addressComponentsList := reverseGeoCodeResponse[0].AddressComponents
+		if requestErr != nil {
+			loggerInstance.Println(requestErr.Error())
+		} else {
 
-		for _, addressComponent := range addressComponentsList {
-			for _, addressType := range addressComponent.Types {
-				locationMap[addressType] = addressComponent.LongName
+			addressComponentsList := reverseGeoCodeResponse[0].AddressComponents
+
+			for _, addressComponent := range addressComponentsList {
+				for _, addressType := range addressComponent.Types {
+					locationMap[addressType] = addressComponent.LongName
+				}
 			}
 		}
 	}
@@ -39,21 +42,24 @@ func GetLocationFromCoordinates(lat float64, lon float64, locationMap map[string
 
 func GetLocationFromPlaceName(placeName string, locationMap map[string]string) {
 
-	geoCodeRequest := &maps.GeocodingRequest{
-		Address: placeName,
-	}
+	if placeName != "" {
 
-	geoCodeResponse, requestErr := googleMapsClient.Geocode(context.Background(), geoCodeRequest)
+		geoCodeRequest := &maps.GeocodingRequest{
+			Address: placeName,
+		}
 
-	if requestErr != nil {
-		loggerInstance.Println(requestErr.Error())
-	} else {
+		geoCodeResponse, requestErr := googleMapsClient.Geocode(context.Background(), geoCodeRequest)
 
-		addressComponentsList := geoCodeResponse[0].AddressComponents
+		if requestErr != nil {
+			loggerInstance.Println(requestErr.Error())
+		} else {
 
-		for _, addressComponent := range addressComponentsList {
-			for _, addressType := range addressComponent.Types {
-				locationMap[addressType] = addressComponent.LongName
+			addressComponentsList := geoCodeResponse[0].AddressComponents
+
+			for _, addressComponent := range addressComponentsList {
+				for _, addressType := range addressComponent.Types {
+					locationMap[addressType] = addressComponent.LongName
+				}
 			}
 		}
 	}
