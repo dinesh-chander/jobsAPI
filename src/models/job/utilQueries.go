@@ -1,10 +1,5 @@
 package job
 
-func GetJobsCount() (count int) {
-	db.Table(tableName).Count(&count)
-	return
-}
-
 func FindLastAddedEntryTimestampForChannel(channelName string) (lastPublishedAt int64) {
 
 	tx := db.Begin()

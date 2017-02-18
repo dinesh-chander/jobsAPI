@@ -6,6 +6,7 @@ import (
 	"logger"
 	jobType "types/jobs"
 
+	"fmt"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
 )
@@ -44,7 +45,10 @@ func createDatabase() {
 }
 
 func createDatabaseTables() {
+
 	var tableCreationErr error
+
+	tableName = config.GetConfig("mode") + "_" + "jobs"
 
 	tableCreationErr = db.Table(tableName).AutoMigrate(&jobType.Job{}).Error
 
@@ -54,11 +58,44 @@ func createDatabaseTables() {
 }
 
 func createDatabaseTableIndexes() {
-	indexCreationErr := db.Table(tableName).RemoveIndex("idx_source_id").AddUniqueIndex("idx_source_id", "source_id").Error
 
-	if indexCreationErr != nil {
-		loggerInstance.Fatalln(indexCreationErr.Error())
-	}
+	//indexCreationErr := db.Table(tableName).Exec("CREATE UNIQUE INDEX %s ON %s (%s);", "idx_source_id", tableName, "source_id").Error
+	//
+	//if indexCreationErr != nil {
+	//	loggerInstance.Fatalln(indexCreationErr.Error())
+	//}
+
+	go func() {
+		titleIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);", "idx_source_id", tableName, "source_id")).Error
+
+		if titleIndexCreationErr != nil {
+			loggerInstance.Println(titleIndexCreationErr.Error())
+		}
+	}()
+
+	go func() {
+		titleIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE FULLTEXT INDEX %s ON %s (%s);", "fts_idx_title", tableName, "title")).Error
+
+		if titleIndexCreationErr != nil {
+			loggerInstance.Println(titleIndexCreationErr.Error())
+		}
+	}()
+
+	go func() {
+		descriptionIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE FULLTEXT INDEX %s ON %s (%s);", "fts_idx_description", tableName, "description")).Error
+
+		if descriptionIndexCreationErr != nil {
+			loggerInstance.Println(descriptionIndexCreationErr.Error())
+		}
+	}()
+
+	go func() {
+		locationIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE FULLTEXT INDEX %s ON %s (%s, %s, %s);", "fts_idx_location", tableName, "address", "city", "country")).Error
+
+		if locationIndexCreationErr != nil {
+			loggerInstance.Println(locationIndexCreationErr.Error())
+		}
+	}()
 }
 
 func setConnectionConfiguration() {
@@ -77,8 +114,6 @@ func setConnectionConfiguration() {
 func init() {
 
 	var connectionErr error
-
-	tableName = config.GetConfig("mode") + "_" + "jobs"
 
 	loggerInstance = logger.Logger
 
@@ -103,4 +138,16 @@ func init() {
 	createDatabaseTables()
 
 	createDatabaseTableIndexes()
+}
+
+func FindContent(searchQuery *jobType.Query) (searchResult []jobType.Job, numberOfAvailableRecords int) {
+
+	searchQuerySQLString := buildSearchString(searchQuery)
+
+	if searchQuery.Limit == 0 {
+		searchResult = []jobType.Job{}
+		return
+	}
+
+	return findFromNormalTable(searchQuerySQLString, searchQuery.Limit, searchQuery.Skip)
 }

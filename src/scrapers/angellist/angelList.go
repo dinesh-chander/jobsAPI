@@ -38,7 +38,7 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 				select {
 				case newURLForProcessing := <-jobsURLChannel:
 
-					loggerInstance.Println("New Job Processing Task Fetched By :", workerId)
+					loggerInstance.Println(workerId, ":", newURLForProcessing)
 
 					newJob, ok := parseSingleJobPage(newURLForProcessing)
 
@@ -127,7 +127,7 @@ func fetchAllJobsURL(pageMarkup *http.Response, jobsURLChannel chan string) {
 			return
 		}
 
-		loggerInstance.Println("Adding New URL for processing")
+		loggerInstance.Println("Adding for Processing :", href)
 
 		jobsURLChannel <- href
 	})
@@ -215,10 +215,12 @@ func findJobIdsList(searchWordsList []string) (startupIDList []int, jobsIDList [
 	if !ifJobsIDFound {
 		startupIDList = []int{}
 		jobsIDList = [][]int{}
-	} else {
-		startupIDList = startupIDList[:25]
-		jobsIDList = jobsIDList[:25]
 	}
+
+	//else {
+	//	startupIDList = startupIDList[:25]
+	//	jobsIDList = jobsIDList[:25]
+	//}
 
 	return
 }
