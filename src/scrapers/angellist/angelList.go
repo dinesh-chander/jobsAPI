@@ -290,11 +290,15 @@ func findJobIdsList(searchWordsList []string) (companyAndJobIds [](*companyAndIt
 
 			jobIdsList = companyDetails.jobIdsList
 
-			for idIndex, newJobListDetails = range jobIdsList {
+			for idIndex = 0; idIndex < len(jobIdsList); {
+
+				newJobListDetails = jobIdsList[idIndex]
 
 				if !newJobIdsMap[newJobListDetails.jobId] {
 					jobIdsList[idIndex] = jobIdsList[len(jobIdsList)-1]
 					jobIdsList = jobIdsList[:len(jobIdsList)-1]
+				} else {
+					idIndex = idIndex + 1
 				}
 			}
 

@@ -14,9 +14,9 @@ func GetConfig(configProperty string) (value string) {
 func init() {
 	config = make(map[string]string)
 
-	//config["mode"] = "production"
+	config["mode"] = "production"
 
-	config["mode"] = "development"
+	//config["mode"] = "development"
 
 	if config["mode"] == "development" {
 
@@ -65,7 +65,7 @@ func init() {
 		config["interface"] = "localhost"
 		config["port"] = "8080"
 		config["gzip"] = "true"
-		config["jobManagersCount"] = "2"
+		config["jobManagersCount"] = "4"
 
 		config["proxyURL"] = ""
 
