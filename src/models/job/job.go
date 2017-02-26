@@ -57,7 +57,7 @@ func createDatabaseTables() {
 	}
 }
 
-func createDatabaseTableIndexes() {
+func createTableIndexes() {
 
 	//indexCreationErr := db.Table(tableName).Exec("CREATE UNIQUE INDEX %s ON %s (%s);", "idx_source_id", tableName, "source_id").Error
 	//
@@ -66,10 +66,18 @@ func createDatabaseTableIndexes() {
 	//}
 
 	go func() {
-		titleIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);", "idx_source_id", tableName, "source_id")).Error
+		sourceIdIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE UNIQUE INDEX %s ON %s (%s);", "idx_source_id", tableName, "source_id")).Error
 
-		if titleIndexCreationErr != nil {
-			loggerInstance.Println(titleIndexCreationErr.Error())
+		if sourceIdIndexCreationErr != nil {
+			loggerInstance.Println(sourceIdIndexCreationErr.Error())
+		}
+	}()
+
+	go func() {
+		channelNameIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE INDEX %s ON %s (%s);", "idx_channel_name", tableName, "channel_name")).Error
+
+		if channelNameIndexCreationErr != nil {
+			loggerInstance.Println(channelNameIndexCreationErr.Error())
 		}
 	}()
 
@@ -82,7 +90,7 @@ func createDatabaseTableIndexes() {
 	}()
 
 	go func() {
-		descriptionIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE FULLTEXT INDEX %s ON %s (%s);", "fts_idx_description", tableName, "description")).Error
+		descriptionIndexCreationErr := db.Table(tableName).Exec(fmt.Sprintf("CREATE FULLTEXT INDEX %s ON %s (%s, %s);", "fts_idx_keyword", tableName, "description", "tags")).Error
 
 		if descriptionIndexCreationErr != nil {
 			loggerInstance.Println(descriptionIndexCreationErr.Error())
@@ -137,7 +145,7 @@ func init() {
 
 	createDatabaseTables()
 
-	createDatabaseTableIndexes()
+	createTableIndexes()
 }
 
 func FindContent(searchQuery *jobType.Query) (searchResult []jobType.Job, numberOfAvailableRecords int) {
@@ -149,5 +157,5 @@ func FindContent(searchQuery *jobType.Query) (searchResult []jobType.Job, number
 		return
 	}
 
-	return findFromNormalTable(searchQuerySQLString, searchQuery.Limit, searchQuery.Skip)
+	return findJobs(searchQuerySQLString, searchQuery.Limit, searchQuery.Skip)
 }

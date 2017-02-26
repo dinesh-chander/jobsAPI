@@ -19,6 +19,7 @@ func convertToStandardJobStruct(newJob *whoishiring.WhoIsHiringType) (singleJob 
 	singleJob.Published_Date = newJob.Time
 	singleJob.Title = newJob.Title
 	singleJob.Job_Type = newJob.Kind
+	singleJob.Apply = newJob.Source
 	singleJob.Source = newJob.Source
 	singleJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description)
 	singleJob.Source_Name = newJob.Source_name

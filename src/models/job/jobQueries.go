@@ -15,7 +15,7 @@ func AddJob(newJob *jobType.Job) {
 	}
 }
 
-func findFromNormalTable(searchQuery string, resultListLength int, offset int) (searchResult []jobType.Job, numberOfAvailableRecords int) {
+func findJobs(searchQuery string, resultListLength int, offset int) (searchResult []jobType.Job, numberOfAvailableRecords int) {
 
 	searchResult = []jobType.Job{}
 

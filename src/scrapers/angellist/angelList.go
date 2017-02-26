@@ -10,13 +10,22 @@ import (
 	jobType "types/jobs"
 	cronParse "utils/cronParser"
 	"utils/geoUtils"
-	miscellaneousUtils "utils/miscellaneous"
 
 	gq "github.com/PuerkitoBio/goquery"
 	"net/http"
 	"net/url"
 	"utils/filters"
 )
+
+type jobListDetails struct {
+	jobId  string
+	jobURL string
+}
+
+type companyAndItsJobs struct {
+	startupId  string
+	jobIdsList [](*jobListDetails)
+}
 
 var channelName string
 var loggerInstance *log.Logger
@@ -26,7 +35,7 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 
 	expr := cronParse.Parse(scheduleAt)
 
-	jobsURLChannel := make(chan string, 2000)
+	jobsURLChannel := make(chan *jobListDetails, 2000)
 
 	loggerInstance.Println("Starting", int(batchSize/2), "Angelist Job Fetchers")
 
@@ -36,17 +45,17 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 
 			for {
 				select {
-				case newURLForProcessing := <-jobsURLChannel:
+				case newJobDetailsForProcessing := <-jobsURLChannel:
 
-					loggerInstance.Println(workerId, ":", newURLForProcessing)
+					loggerInstance.Println(workerId, ":", newJobDetailsForProcessing.jobURL)
 
-					newJob, ok := parseSingleJobPage(newURLForProcessing)
+					newJob, ok := parseSingleJobPage(newJobDetailsForProcessing)
 
 					if ok {
 						jobsStream <- newJob
 					}
 
-					time.Sleep(time.Second * 15)
+					time.Sleep(time.Second * 40)
 				}
 			}
 		}(workerIndex)
@@ -55,16 +64,16 @@ func GetAngelListJobs(jobsStream chan *jobType.Job, scheduleAt string, searchWor
 	loggerInstance.Println("AngelList Scraper Started")
 
 	for {
-		startupIDList, jobsIDList := findJobIdsList(searchWordsList)
+		companyAndJobIds := findJobIdsList(searchWordsList)
 
-		fetchJobsURL(startupIDList, jobsIDList, jobsURLChannel)
+		fetchJobsURL(companyAndJobIds, jobsURLChannel)
 
 		nextTime := expr.Next(time.Now())
 		time.Sleep(time.Duration(nextTime.Unix()-time.Now().Unix()) * time.Second)
 	}
 }
 
-func fetchGroupedJobsListPage(pageParams string, jobsURLChannel chan string) {
+func fetchGroupedJobsListPage(batchedCompanyAndItsJobs [](*companyAndItsJobs), pageParams string, jobsURLChannel chan *jobListDetails) {
 
 	angelListURL := `https://angel.co/job_listings/browse_startups_table?`
 
@@ -73,46 +82,48 @@ func fetchGroupedJobsListPage(pageParams string, jobsURLChannel chan string) {
 	if fetchErr != nil {
 		loggerInstance.Println(fetchErr.Error())
 	} else {
-
-		fetchAllJobsURL(response, jobsURLChannel)
+		fetchAllJobsURL(batchedCompanyAndItsJobs, response, jobsURLChannel)
 		response.Body.Close()
 	}
 }
 
-func fetchJobsURL(startupIDList []int, jobsIDList [][]int, jobsURLChannel chan string) {
+func fetchJobsURL(companyAndJobIds [](*companyAndItsJobs), jobsURLChannel chan *jobListDetails) {
+
 	var lastIndex int
 
-	var batchedStartupIDs []int
-	var batchedJobsIDList [][]int
+	var listingDetails *jobListDetails
+	var batchedCompanyAndItsJobs [](*companyAndItsJobs)
 
-	for index := 0; index < len(startupIDList); index = index + batchSize {
+	for index := 0; index < len(companyAndJobIds); index = index + batchSize {
 
 		lastIndex = index + batchSize
 
-		if lastIndex >= len(startupIDList) {
-			lastIndex = len(startupIDList) - 1
+		if lastIndex >= len(companyAndJobIds) {
+			lastIndex = len(companyAndJobIds) - 1
 		}
 
-		batchedStartupIDs = startupIDList[index:lastIndex]
-		batchedJobsIDList = jobsIDList[index:lastIndex]
+		batchedCompanyAndItsJobs = companyAndJobIds[index:lastIndex]
 
 		urlParams := url.Values{}
 
-		for selectedStartUpIDsIndex, startupId := range batchedStartupIDs {
-			urlParams.Add("startup_ids[]", strconv.Itoa(startupId))
+		for selectedStartUpIDsIndex, companyDetails := range batchedCompanyAndItsJobs {
+			urlParams.Add("startup_ids[]", companyDetails.startupId)
 
-			for _, listingId := range batchedJobsIDList[selectedStartUpIDsIndex] {
-				urlParams.Add("listing_ids["+strconv.Itoa(selectedStartUpIDsIndex)+"][]", strconv.Itoa(listingId))
+			for _, listingDetails = range companyDetails.jobIdsList {
+				urlParams.Add("listing_ids["+strconv.Itoa(selectedStartUpIDsIndex)+"][]", listingDetails.jobId)
 			}
 		}
 
 		finalUrl, _ := url.QueryUnescape(urlParams.Encode())
 
-		go fetchGroupedJobsListPage(finalUrl, jobsURLChannel)
+		fetchGroupedJobsListPage(batchedCompanyAndItsJobs, finalUrl, jobsURLChannel)
+
+		time.Sleep(time.Minute * 5)
 	}
 }
 
-func fetchAllJobsURL(pageMarkup *http.Response, jobsURLChannel chan string) {
+func fetchAllJobsURL(batchedCompanyAndItsJobs [](*companyAndItsJobs), pageMarkup *http.Response, jobsURLChannel chan *jobListDetails) {
+
 	doc, err := gq.NewDocumentFromResponse(pageMarkup)
 
 	if err != nil {
@@ -121,6 +132,7 @@ func fetchAllJobsURL(pageMarkup *http.Response, jobsURLChannel chan string) {
 	}
 
 	doc.Find(".title a").Each(func(_ int, s *gq.Selection) {
+
 		href, found := s.Attr("href")
 
 		if !found {
@@ -130,15 +142,26 @@ func fetchAllJobsURL(pageMarkup *http.Response, jobsURLChannel chan string) {
 
 		loggerInstance.Println("Adding for Processing :", href)
 
-		jobsURLChannel <- href
+		for _, companyDetails := range batchedCompanyAndItsJobs {
+
+			for _, jobDetails := range companyDetails.jobIdsList {
+
+				if strings.Contains(href, jobDetails.jobId) {
+					jobDetails.jobURL = href
+					jobsURLChannel <- jobDetails
+					return
+				}
+			}
+		}
+
 	})
 
 	return
 }
 
-func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
+func parseSingleJobPage(jobDetails *jobListDetails) (newJob *jobType.Job, ok bool) {
 
-	response, fetchErr := makeRequestToAngelListServer("GET", jobURL, "", nil, true)
+	response, fetchErr := makeRequestToAngelListServer("GET", jobDetails.jobURL, "", nil, true)
 
 	if fetchErr != nil {
 		loggerInstance.Println(fetchErr.Error())
@@ -156,7 +179,7 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 
 	newJob = job.NewJob()
 
-	titleAndCompany := strings.Split(doc.Find(".company-summary").Find("h1").First().Text(), "at")
+	titleAndCompany := strings.Split(doc.Find(".company-summary").Find("h1").First().Text(), " at ")
 
 	if len(titleAndCompany) > 0 {
 		newJob.Title = strings.TrimSpace(titleAndCompany[0])
@@ -188,10 +211,10 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 			}
 		}
 
-		newJob.Apply = jobURL
+		newJob.Apply = jobDetails.jobURL
 
-		newJob.Source = jobURL
-		newJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description)
+		newJob.Source = jobDetails.jobURL
+		newJob.Source_Id = jobDetails.jobId
 		newJob.Source_Name = "al"
 
 		if newJob.Address != "" {
@@ -209,21 +232,82 @@ func parseSingleJobPage(jobURL string) (newJob *jobType.Job, ok bool) {
 	return
 }
 
-func findJobIdsList(searchWordsList []string) (startupIDList []int, jobsIDList [][]int) {
+func findJobIdsList(searchWordsList []string) (companyAndJobIds [](*companyAndItsJobs)) {
 
 	var ifJobsIDFound bool
 
-	startupIDList, jobsIDList, ifJobsIDFound = getJobsPage(searchWordsList)
+	startupIDList, jobsIDList, ifJobsIDFound := getJobsPage(searchWordsList)
 
-	if !ifJobsIDFound {
-		startupIDList = []int{}
-		jobsIDList = [][]int{}
+	companyAndJobIds = [](*companyAndItsJobs){}
+
+	if ifJobsIDFound {
+
+		var allJobsIDs []string
+		var jobIdString string
+		var companyDetails *companyAndItsJobs
+		var newJobListDetails *jobListDetails
+		var jobIdsList [](*jobListDetails)
+
+		for startupIndex, startupId := range startupIDList {
+
+			companyDetails = &companyAndItsJobs{}
+
+			companyDetails.startupId = strconv.Itoa(startupId)
+
+			jobIdsList = [](*jobListDetails){}
+
+			for _, jobId := range jobsIDList[startupIndex] {
+
+				jobIdString = strconv.Itoa(jobId)
+
+				newJobListDetails = &jobListDetails{
+					jobId: jobIdString,
+				}
+
+				jobIdsList = append(jobIdsList, newJobListDetails)
+				allJobsIDs = append(allJobsIDs, jobIdString)
+			}
+
+			companyDetails.jobIdsList = jobIdsList
+			companyAndJobIds = append(companyAndJobIds, companyDetails)
+		}
+
+		newJobIDsList := job.FindAlreadyPresentJobsWithGivenSourceIds(channelName, allJobsIDs)
+
+		newJobIdsMap := make(map[string]bool)
+
+		for _, jobIdString := range newJobIDsList {
+			newJobIdsMap[jobIdString] = true
+		}
+
+		var idIndex int
+
+		loggerInstance.Println("Old Length :", len(companyAndJobIds))
+
+		for companyIndex := 0; companyIndex < len(companyAndJobIds); {
+
+			companyDetails = companyAndJobIds[companyIndex]
+
+			jobIdsList = companyDetails.jobIdsList
+
+			for idIndex, newJobListDetails = range jobIdsList {
+
+				if !newJobIdsMap[newJobListDetails.jobId] {
+					jobIdsList[idIndex] = jobIdsList[len(jobIdsList)-1]
+					jobIdsList = jobIdsList[:len(jobIdsList)-1]
+				}
+			}
+
+			if len(jobIdsList) == 0 {
+				companyAndJobIds[companyIndex] = companyAndJobIds[len(companyAndJobIds)-1]
+				companyAndJobIds = companyAndJobIds[:len(companyAndJobIds)-1]
+			} else {
+				companyIndex = companyIndex + 1
+			}
+		}
+
+		loggerInstance.Println("New Length :", len(companyAndJobIds))
 	}
-
-	//else {
-	//	startupIDList = startupIDList[:25]
-	//	jobsIDList = jobsIDList[:25]
-	//}
 
 	return
 }

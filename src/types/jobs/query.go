@@ -17,12 +17,28 @@ type Query struct {
 func (query *Query) ParseQueryParamsFromURL(url *url.URL) (parseErr error) {
 	queryParams := url.Query()
 
-	if len(queryParams.Get("locations")) > 0 {
-		query.Locations = strings.Split(queryParams.Get("locations"), ",")
+	locations := strings.TrimSpace(queryParams.Get("locations"))
+	titles := strings.TrimSpace(queryParams.Get("titles"))
+	keywords := strings.TrimSpace(queryParams.Get("keywords"))
+	limit := strings.TrimSpace(queryParams.Get("limit"))
+	skip := strings.TrimSpace(queryParams.Get("skip"))
+
+	if len(locations) > 0 {
+
+		locationsList := strings.Split(locations, ",")
+
+		if len(locationsList) > 0 {
+			query.Locations = locationsList
+		}
 	}
 
-	if len(queryParams.Get("titles")) > 0 {
-		query.Titles = strings.Split(queryParams.Get("titles"), ",")
+	if len(titles) > 0 {
+
+		titlesList := strings.Split(titles, ",")
+
+		if len(titlesList) > 0 {
+			query.Titles = titlesList
+		}
 	}
 
 	//	if len(queryParams.Get("companies")) > 0 {
@@ -33,33 +49,40 @@ func (query *Query) ParseQueryParamsFromURL(url *url.URL) (parseErr error) {
 	//		query.Tags = strings.Split(queryParams.Get("tags"), ",")
 	//	}
 
-	if len(queryParams.Get("keywords")) > 0 {
-		query.Keywords = strings.Split(queryParams.Get("keywords"), ",")
+	if len(keywords) > 0 {
+
+		keywordsList := strings.Split(keywords, ",")
+
+		if len(keywordsList) > 0 {
+			query.Keywords = keywordsList
+		}
 	}
 
-	if len(queryParams.Get("limit")) > 0 {
-		var limit int64
-		limit, parseErr = strconv.ParseInt(queryParams.Get("limit"), 10, 64)
+	if len(limit) > 0 {
+
+		var limitVal int64
+		limitVal, parseErr = strconv.ParseInt(limit, 10, 64)
 
 		if parseErr != nil {
 			return
 		}
 
-		query.Limit = int(limit)
+		query.Limit = int(limitVal)
 	} else {
 		query.Limit = 20
 	}
 
-	if len(queryParams.Get("skip")) > 0 {
-		var skipCount int64
+	if len(skip) > 0 {
 
-		skipCount, parseErr = strconv.ParseInt(queryParams.Get("skip"), 10, 64)
+		var skipVal int64
+
+		skipVal, parseErr = strconv.ParseInt(skip, 10, 64)
 
 		if parseErr != nil {
 			return
 		}
 
-		query.Skip = int(skipCount)
+		query.Skip = int(skipVal)
 	} else {
 		query.Skip = 0
 	}

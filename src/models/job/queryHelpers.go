@@ -13,7 +13,7 @@ func buildSearchString(searchQuery *jobType.Query) (searchString string) {
 
 	queryStringList[0] = formatSearchQuery(searchQuery.Locations, []string{"address", "city", "country"})
 	queryStringList[1] = formatSearchQuery(searchQuery.Titles, []string{"title"})
-	queryStringList[2] = formatSearchQuery(searchQuery.Keywords, []string{"description"})
+	queryStringList[2] = formatSearchQuery(searchQuery.Keywords, []string{"description", "tags"})
 
 	for _, value := range queryStringList {
 
@@ -37,7 +37,6 @@ func formatSearchQuery(searchStringsList []string, propertiesName []string) (sea
 	}
 
 	if len(searchStringsList) != 0 {
-		searchSQLString = strings.Join(searchStringsList, "")
 		searchSQLString = fmt.Sprintf(`MATCH(%s) AGAINST('%s' IN BOOLEAN MODE)`, strings.Join(propertiesName, ","), strings.Join(searchStringsList, " "))
 	}
 

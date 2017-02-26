@@ -14,9 +14,9 @@ func GetConfig(configProperty string) (value string) {
 func init() {
 	config = make(map[string]string)
 
-	config["mode"] = "production"
+	//config["mode"] = "production"
 
-	//config["mode"] = "development"
+	config["mode"] = "development"
 
 	if config["mode"] == "development" {
 
@@ -33,7 +33,7 @@ func init() {
 		config["interface"] = "localhost"
 		config["port"] = "9080"
 		config["gzip"] = "true"
-		config["jobManagersCount"] = "3"
+		config["jobManagersCount"] = "2"
 
 		config["fetchFrom"] = "30" // default 0 means fetch today's data
 
@@ -42,6 +42,8 @@ func init() {
 		config["disableLog"] = "false"
 		//config["logsDir"] = "logs"
 		config["logsFile"] = "logs.log"
+
+		config["proxyURL"] = ""
 
 		config["googleGeoAPIKey"] = "AIzaSyA87A0cCVeQR1yCbeLjitQlWRzg1hYqQyw"
 
@@ -63,7 +65,9 @@ func init() {
 		config["interface"] = "localhost"
 		config["port"] = "8080"
 		config["gzip"] = "true"
-		config["jobManagersCount"] = "5"
+		config["jobManagersCount"] = "2"
+
+		config["proxyURL"] = ""
 
 		config["fetchFrom"] = "120" // default 0 means fetch today's data
 

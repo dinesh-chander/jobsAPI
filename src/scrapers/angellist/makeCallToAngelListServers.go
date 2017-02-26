@@ -1,10 +1,10 @@
 package angellist
 
 import (
+	"config"
 	"errors"
-	"github.com/viki-org/dnscache"
-	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -57,14 +57,20 @@ func setHeaders(request *http.Request, headers map[string]string) {
 
 func init() {
 
-	resolver := dnscache.New(time.Minute * 5)
-
 	httpTransport = &http.Transport{
 		MaxIdleConnsPerHost: 0,
-		Dial: func(network string, address string) (net.Conn, error) {
-			separator := strings.LastIndex(address, ":")
-			ip, _ := resolver.FetchOneString(address[:separator])
-			return net.Dial("tcp", ip+address[separator:])
-		},
+	}
+
+	if config.GetConfig("proxyURL") != "" {
+
+		proxyURL, proxyURLErr := url.Parse(config.GetConfig("proxyURL"))
+
+		if proxyURLErr != nil {
+			loggerInstance.Fatalln(proxyURLErr.Error())
+		}
+
+		loggerInstance.Println("Using Proxy : ", config.GetConfig("proxyURL"))
+
+		httpTransport.Proxy = http.ProxyURL(proxyURL)
 	}
 }
