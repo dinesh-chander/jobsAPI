@@ -46,7 +46,6 @@ func updateNewJobs(jobsStream chan *jobTypes.Job) {
 		case newJob := <-jobsStream:
 
 			if newJob != nil {
-				loggerInstance.Println("new job added from :", newJob.Channel_Name)
 				job.AddJob(newJob)
 			}
 

@@ -12,6 +12,8 @@ func AddJob(newJob *jobType.Job) {
 
 	if insertErr != nil {
 		loggerInstance.Println(insertErr.Error())
+	} else {
+		loggerInstance.Println("new job added from :", newJob.Channel_Name)
 	}
 }
 

@@ -26,6 +26,8 @@ func init() {
 		config["db_host"] = "127.0.0.1"
 		config["db_port"] = "3306"
 
+		config["betalist"] = "0 0-59/1 0 * * * *"
+
 		config["whoishiring"] = "0 0 0-23/12 * * * *"
 
 		config["angellist"] = "0 0 0 * * 0 *"
@@ -58,9 +60,11 @@ func init() {
 		config["db_host"] = "127.0.0.1"
 		config["db_port"] = "4079"
 
+		config["betalist"] = "0 0 0 * * * *"
+
 		config["whoishiring"] = "0 0 0 * * * *"
 
-		config["angellist"] = "0 0 0 * * 0-6/5 *"
+		config["angellist"] = "0 0 0 * * 0-6/2 *"
 
 		config["interface"] = "localhost"
 		config["port"] = "8080"
