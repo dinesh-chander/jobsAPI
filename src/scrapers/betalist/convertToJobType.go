@@ -16,11 +16,11 @@ func convertToStandardJobStruct(newJob *betalist.BetalistType) (singleJob *jobTy
 	singleJob.Description = newJob.Description_html
 	singleJob.Address = newJob.Location
 	singleJob.Is_Remote = newJob.Remote
-	singleJob.Published_Date = newJob.Created_at_i
+	singleJob.Published_Date = newJob.Created_at_i * 1000
 	singleJob.Title = newJob.Title
 	singleJob.Job_Type = newJob.Commitment
 	singleJob.Apply = "https://betalist.com" + newJob.Path
-	singleJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Description_html)
+	singleJob.Source_Id = miscellaneousUtils.GenerateSHAChecksum(newJob.Title + newJob.Description_html)
 	singleJob.Source_Name = "bl"
 
 	singleJob.Channel_Name = channelName

@@ -71,7 +71,7 @@ func init() {
 		config["gzip"] = "true"
 		config["jobManagersCount"] = "4"
 
-		config["proxyURL"] = ""
+		config["proxyURL"] = "http://Rohit:28%24rohit%4028@world.proxymesh.com:31280"
 
 		config["fetchFrom"] = "120" // default 0 means fetch today's data
 
